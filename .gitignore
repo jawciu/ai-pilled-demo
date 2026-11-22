@@ -1,0 +1,13 @@
+node_modules/
+.bzcanvas.json
+.bzcode/
+.next/
+out/
+.tmp/
+.env
+.env.*
+!.env.example
+.vercel/
+playwright-report/
+test-results/
+*.tsbuildinfo

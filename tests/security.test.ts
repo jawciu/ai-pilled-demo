@@ -1,0 +1,80 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { PGlite } from '@electric-sql/pglite';
+
+test('database policies isolate users, deduplicate messages, and persist rows', async () => {
+  const db = new PGlite();
+  await db.exec(`
+    create role anon;
+    create role authenticated;
+    create role service_role bypassrls;
+    create schema auth;
+    create table auth.users(id uuid primary key);
+    create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+    create function auth.role() returns text language sql stable as $$ select current_setting('request.jwt.claim.role',true) $$;
+    grant usage on schema auth to authenticated,anon,service_role;
+    grant execute on function auth.uid(),auth.role() to authenticated,anon,service_role;
+  `);
+  await db.exec(await readFile(new URL('../supabase/setup.sql', import.meta.url), 'utf8'));
+  const a = '00000000-0000-4000-8000-000000000001';
+  const b = '00000000-0000-4000-8000-000000000002';
+  const c = '00000000-0000-4000-8000-000000000003';
+  const d = '00000000-0000-4000-8000-000000000004';
+  await db.query('insert into auth.users(id) values ($1),($2),($3),($4)', [a,b,c,d]);
+  async function asUser(id: string) {
+    await db.exec('reset role');
+    await db.query("select set_config('request.jwt.claim.sub',$1,false),set_config('request.jwt.claim.role','authenticated',false)", [id]);
+    await db.exec('set role authenticated');
+  }
+  async function join(id: string, name: string, slug = 'ai-pilled-room-84e2c9b7') {
+    await asUser(id);
+    await db.query('select public.join_event($1,$2,$3,$4,$5)', [slug,name,'I need help debugging React','I can help with interface design','Green jumper']);
+  }
+  await join(a,'Alice'); await join(b,'Bob'); await join(c,'Charlie');
+  await db.exec('reset role');
+  await db.exec("insert into public.events(slug,title) values('other-event','Other event')");
+  await join(d,'Dora','other-event');
+  assert.equal((await db.query('select * from public.participants')).rows.length, 1, 'other event cannot see participants');
+  await asUser(a);
+  assert.equal((await db.query('select * from public.participants')).rows.length, 3);
+  assert.equal((await db.query('update public.participants set name=$1 where id=$2 returning id',['Spoof',b])).rows.length, 0, 'cannot edit another profile');
+  await assert.rejects(db.query("update public.participants set interpretation='{}' where id=$1",[a]), /permission denied/);
+  await assert.rejects(db.query('update public.participants set event_id=gen_random_uuid() where id=$1',[a]), /permission denied/);
+  const chat = (await db.query<{ id: string }>('select public.start_conversation($1) as id',[b])).rows[0].id;
+  const again = (await db.query<{ id: string }>('select public.start_conversation($1) as id',[b])).rows[0].id;
+  assert.equal(chat, again, 'one conversation per pair');
+  const client = '10000000-0000-4000-8000-000000000001';
+  await db.query('select public.send_message($1,$2,$3)',[chat,'Hello Bob',client]);
+  await db.query('select public.send_message($1,$2,$3)',[chat,'Hello Bob',client]);
+  assert.equal((await db.query('select * from public.messages')).rows.length, 1, 'retry is idempotent');
+  await assert.rejects(db.query('select public.send_message($1,$2,gen_random_uuid())',[chat,'   ']), /between 1 and 2,000/);
+  await asUser(c);
+  assert.equal((await db.query('select * from public.conversations where id=$1',[chat])).rows.length, 0);
+  assert.equal((await db.query('select * from public.messages where conversation_id=$1',[chat])).rows.length, 0);
+  assert.equal((await db.query('select * from public.get_inbox()')).rows.length, 0);
+  await assert.rejects(db.query('select public.send_message($1,$2,gen_random_uuid())',[chat,'Intrusion']), /unavailable/);
+  await assert.rejects(db.query('select public.mark_read($1)',[chat]), /unavailable/);
+  await assert.rejects(db.query('insert into public.messages(conversation_id,sender_id,body,client_id) values($1,$2,$3,gen_random_uuid())',[chat,a,'Forged']), /permission denied/);
+  await asUser(b);
+  assert.equal((await db.query<{unread:number}>('select * from public.get_inbox()')).rows[0].unread, 1);
+  await db.query('select public.mark_read($1)',[chat]);
+  assert.equal((await db.query<{unread:number}>('select * from public.get_inbox()')).rows[0].unread, 0);
+  await db.query('select public.send_message($1,$2,gen_random_uuid())',[chat,'Hello Alice']);
+  await asUser(a);
+  assert.equal((await db.query('select * from public.messages where conversation_id=$1',[chat])).rows.length, 2, 'reply persists across independent identity switches');
+  assert.equal((await db.query<{unread:number}>('select * from public.get_inbox()')).rows[0].unread, 1);
+  const claimed = (await db.query<{claimed:boolean}>('select public.claim_analysis() as claimed')).rows[0].claimed;
+  assert.equal(claimed, true);
+  assert.equal((await db.query<{claimed:boolean}>('select public.claim_analysis() as claimed')).rows[0].claimed, false, 'analysis rate limit');
+  await db.exec('reset role');
+  await db.query("update public.participants set updated_at=now()-interval '10 seconds', interpretation=jsonb_build_object('version',1,'needs','[]'::jsonb,'offers','[]'::jsonb) where id=$1",[a]);
+  await asUser(a);
+  await db.query('update public.participants set need=$1 where id=$2',['I need help with something else now',a]);
+  const changed = (await db.query<{answer_version:number; interpretation:unknown}>('select answer_version,interpretation from public.participants where id=$1',[a])).rows[0];
+  assert.equal(changed.answer_version, 2); assert.equal(changed.interpretation, null);
+  await assert.rejects(db.query('select public.start_conversation($1)',[d]), /unavailable/);
+  await db.exec('reset role; set role anon');
+  await assert.rejects(db.query('select * from public.messages'), /permission denied/);
+  await db.close();
+});
