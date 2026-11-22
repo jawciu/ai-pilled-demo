@@ -60,6 +60,17 @@ test('separate rehearsal sessions do not share identities or pretend to be live'
   await expect(a.getByText('Fictional people. Messages stay in this browser.', { exact: false })).toBeVisible();
   await first.close(); await second.close();
 });
+test('suggested opening question survives repeated conversation navigation', async ({ page }) => {
+  await join(page);
+  for (let i = 0; i < 3; i++) {
+    await page.getByRole('button', { name: 'Meet Theo', exact: true }).first().click();
+    await page.getByRole('button', { name: 'Message Theo', exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Message to Theo' })).toHaveValue(/Hi Theo!.*help debugging React/);
+    await nav(page, 'For you');
+  }
+  await nav(page, 'Inbox');
+  await expect(page.locator('.conversation-row')).toHaveCount(1);
+});
 test('landing and onboarding fit a phone without horizontal scrolling', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: /Your next breakthrough/ })).toBeVisible();

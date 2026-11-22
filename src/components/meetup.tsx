@@ -82,22 +82,22 @@ export default function Meetup({ slug, demo = false }: { slug: string; demo?: bo
       if (document.visibilityState === 'visible') void app.markRead(active);
     }
   }, [active, tab, app.messages.at(-1)?.id]);
-  useEffect(() => { setSendError(''); setSent(false); setDraft(''); }, [active]);
+  useEffect(() => { setSendError(''); setSent(false); }, [active]);
   const openProfile = (p: Person, match?: Match) => { setSelected(p); setSelectedMatch(match || null); };
   async function startChat() {
     if (!selected) return;
     const id = await app.start(selected);
-    if (id) { setSelected(null); setTab('inbox'); if (selectedMatch) setTimeout(() => setDraft(selectedMatch.question), 0); }
+    if (id) { setSelected(null); setTab('inbox'); setDraft(selectedMatch?.question || ''); }
   }
   async function send(retry = false) {
     const payload = retry ? failed : active ? { body: draft.trim(), id: crypto.randomUUID(), conversation: active } : null;
     if (!payload?.body || sendingRef.current) return;
     sendingRef.current = true; setSending(true); setSendError(''); setSent(false);
-    try { await app.send(payload.body, payload.id, payload.conversation); if (!retry) setDraft(''); setFailed(null); setSent(true); }
+    try { await app.send(payload.body, payload.id, payload.conversation); if (!retry || draft.trim() === payload.body) setDraft(''); setFailed(null); setSent(true); }
     catch (e) { setFailed(payload); setSendError(e instanceof Error ? e.message : 'Message failed to send.'); }
     finally { sendingRef.current = false; setSending(false); }
   }
-  function go(next: typeof tab) { setTab(next); app.setActive(null); app.setError(''); setSaved(false); }
+  function go(next: typeof tab) { setTab(next); app.setActive(null); setDraft(''); app.setError(''); setSaved(false); }
   async function save(p: ProfileInput) { const ok = await app.save(p); if (ok) { setEditing(false); setSaved(true); setTab('discover'); } return ok; }
 
   return <div className="app-shell">
@@ -139,7 +139,7 @@ export default function Meetup({ slug, demo = false }: { slug: string; demo?: bo
           <div className={`inbox-layout ${active ? 'chat-open' : ''}`}><section className="conversation-list" aria-label="Conversations">{app.conversations.length ? [...app.conversations].sort((a, b) => (app.inbox.find(i => i.conversation_id === b.id)?.last_message_at || '').localeCompare(app.inbox.find(i => i.conversation_id === a.id)?.last_message_at || '')).map(c => {
             const person = people.find(p => p.id === (c.participant_a === me.id ? c.participant_b : c.participant_a));
             const item = app.inbox.find(i => i.conversation_id === c.id);
-            return <button key={c.id} className={`conversation-row ${active === c.id ? 'active' : ''}`} onClick={() => app.setActive(c.id)}><Avatar person={person || { name: '?' }}/><span><strong>{person?.name || 'Participant'}</strong><span>{item?.preview || 'Start the conversation'}</span></span>{Number(item?.unread) > 0 && <span className="unread-badge" aria-label={`${item!.unread} unread messages`}>{item!.unread}</span>}</button>;
+            return <button key={c.id} className={`conversation-row ${active === c.id ? 'active' : ''}`} onClick={() => { setDraft(''); app.setActive(c.id); }}><Avatar person={person || { name: '?' }}/><span><strong>{person?.name || 'Participant'}</strong><span>{item?.preview || 'Start the conversation'}</span></span>{Number(item?.unread) > 0 && <span className="unread-badge" aria-label={`${item!.unread} unread messages`}>{item!.unread}</span>}</button>;
           }) : <div className="empty-state"><MessageCircle/><h3>Your next hello starts here.</h3><p>Open a profile to start a conversation.</p><button className="text-button" onClick={() => go('people')}>Meet the room <ArrowRight size={16}/></button></div>}</section>
           <section className="chat-panel" aria-label={partner ? `Conversation with ${partner.name}` : 'Select a conversation'}>{active && partner ? <><div className="chat-header"><button className="icon-button mobile-only" aria-label="Back to inbox" onClick={() => app.setActive(null)}><ArrowLeft size={20}/></button><Avatar person={partner}/><button className="chat-name" onClick={() => openProfile(partner)}><strong>{partner.name}</strong><span>{partner.recognition || 'View profile'}</span></button><span className="private-label">PRIVATE</span></div>
             <div className="message-list" role="log" aria-live="polite" aria-label="Messages"><p className="chat-privacy">Only you and {partner.name} can read this conversation.{demo ? ' Rehearsal messages are stored locally.' : ' Messages are never used for AI matching.'}</p>{!app.messages.length && <p className="chat-prompt">A simple hello is a good place to start.</p>}{app.messages.length === 100 && <p className="small muted">Showing the latest 100 messages.</p>}{app.messages.map(m => <div key={m.id} className={`message ${m.sender_id === me.id ? 'mine' : ''}`}><p>{m.body}</p><span>{new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{m.sender_id === me.id && <> · Sent <Check size={11}/></>}</span></div>)}<div ref={endRef}/></div>
