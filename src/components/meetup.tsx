@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ArrowLeft, ArrowRight, ArrowUpRight, Check, ChevronRight, Coffee, HeartHandshake, LoaderCircle, MessageCircle, Send, Sparkles, UserRound, Users, X } from 'lucide-react';
 import { useMeetup } from '@/lib/use-meetup';
 import { recommendations } from '@/lib/matching';
+import { roomProfiles } from '@/lib/room';
 import { demoPeople } from '@/lib/demo';
 import type { Match, Person, ProfileInput } from '@/lib/types';
 
@@ -62,6 +63,8 @@ export default function Meetup({ slug, demo = false }: { slug: string; demo?: bo
   const sendingRef = useRef(false);
   const attempted = useRef('');
   const { me, people, active } = app;
+  const roomPeople = useMemo(() => roomProfiles(people, me?.id || '', search), [people, me?.id, search]);
+  const roomTotal = people.filter(person => person.id !== me?.id).length;
   const receive = useMemo(() => demo && me ? recommendations(me, people, 'receive') : app.matches.receive, [demo, me, people, app.matches.receive]);
   const give = useMemo(() => demo && me ? recommendations(me, people, 'give') : app.matches.give, [demo, me, people, app.matches.give]);
   const unread = app.inbox.reduce((n, c) => n + Number(c.unread), 0);
@@ -97,7 +100,7 @@ export default function Meetup({ slug, demo = false }: { slug: string; demo?: bo
     catch (e) { setFailed(payload); setSendError(e instanceof Error ? e.message : 'Message failed to send.'); }
     finally { sendingRef.current = false; setSending(false); }
   }
-  function go(next: typeof tab) { setTab(next); app.setActive(null); setDraft(''); app.setError(''); setSaved(false); }
+  function go(next: typeof tab) { setTab(next); app.setActive(null); setDraft(''); setSearch(''); app.setError(''); setSaved(false); window.scrollTo(0, 0); }
   async function save(p: ProfileInput) { const ok = await app.save(p); if (ok) { setEditing(false); setSaved(true); setTab('discover'); } return ok; }
 
   return <div className="app-shell">
@@ -130,9 +133,10 @@ export default function Meetup({ slug, demo = false }: { slug: string; demo?: bo
           })}
           <p className="matching-footnote"><Sparkles size={14}/>Introductions are based on what people actually wrote—not job titles or compatibility scores.</p>
         </>}
-        {tab === 'people' && <><div className="page-intro"><span className="eyebrow">DIFFERENT BACKGROUNDS. SHARED CURIOSITY.</span><h1>Meet <em>the room.</em></h1><p>Browse everyone. A recommendation isn’t required to say hello.</p></div><label className="search-label" htmlFor="search">Find a name or topic</label><input className="search-input" id="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search names, questions or offers…"/>
-          <div className="cards-grid room-grid">{people.filter(p => p.id !== me.id && `${p.name} ${p.need} ${p.offer}`.toLowerCase().includes(search.toLowerCase())).map(person => <article className="person-card" key={person.id}><div className="person-heading"><Avatar person={person}/><div><h3>{person.name}</h3><p>{person.recognition || 'Here to connect'}</p></div></div><span className="section-kicker">I’D LIKE HELP WITH</span><p className="clamp-three">{person.need}</p><span className="section-kicker">I CAN HELP WITH</span><p className="clamp-three">{person.offer}</p><button className="card-action" onClick={() => openProfile(person)}>View profile <ArrowUpRight size={16}/></button></article>)}</div>
-          {!people.some(p => p.id !== me.id && `${p.name} ${p.need} ${p.offer}`.toLowerCase().includes(search.toLowerCase())) && <div className="empty-state"><Users/><h3>{search ? 'No profiles found.' : 'You’re early. Welcome!'}</h3><p>{search ? 'Try a different name or topic.' : 'Other participants will appear here as they join.'}</p></div>}
+        {tab === 'people' && <><div className="page-intro"><span className="eyebrow">DIFFERENT BACKGROUNDS. SHARED CURIOSITY.</span><h1>Meet <em>the room.</em></h1><p>Browse everyone. A recommendation isn’t required to say hello.</p></div><label className="search-label" htmlFor="search">Find a name or topic</label><input className="search-input" id="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search names, questions or offers…" aria-describedby="room-result-count"/>
+          <div className="section-heading"><p id="room-result-count" className="small muted" role="status">Showing {roomPeople.length} of {roomTotal} people · Recently updated first</p>{search && <button className="text-button" onClick={() => setSearch('')}>Clear search</button>}</div>
+          <div className="cards-grid room-grid">{roomPeople.map(person => <article className="person-card" key={person.id}><div className="person-heading"><Avatar person={person}/><div><h3>{person.name}</h3><p>{person.recognition || 'Here to connect'}</p></div></div><span className="section-kicker">I’D LIKE HELP WITH</span><p className="clamp-three">{person.need}</p><span className="section-kicker">I CAN HELP WITH</span><p className="clamp-three">{person.offer}</p><button className="card-action" onClick={() => openProfile(person)}>View profile <ArrowUpRight size={16}/></button></article>)}</div>
+          {roomPeople.length === 0 && <div className="empty-state"><Users/><h3>{search ? 'No profiles found.' : 'You’re early. Welcome!'}</h3><p>{search ? 'Try a different name or topic.' : 'Other participants will appear here as they join.'}</p></div>}
         </>}
         {tab === 'profile' && <><div className="page-intro"><span className="eyebrow">A LITTLE ABOUT YOU</span><h1>Your corner <em>of the room.</em></h1><p>Changed your mind or got unstuck? Keep your answers up to date.</p></div><section className="profile-detail own-profile"><div className="profile-title"><Avatar person={me} large/><div><h2>{me.name}</h2><p>{me.recognition || 'Add a recognition description to help people find you.'}</p></div></div>{editing ? <ProfileForm initial={me} busy={app.busy} demo={demo} onSave={save} onCancel={() => setEditing(false)}/> : <><span className="section-kicker">I’D LIKE HELP WITH</span><p className="answer-text">{me.need}</p><span className="section-kicker">I CAN HELP WITH</span><p className="answer-text">{me.offer}</p><button className="button primary" onClick={() => setEditing(true)}>Edit my profile <ArrowUpRight size={17}/></button><p className="small muted">Visible to participants in this event. Messages remain private. Access is tied to this browser’s saved session.</p></>}</section></>}
         {tab === 'inbox' && <><div className="page-intro inbox-intro"><span className="eyebrow">TAKE IT FROM HERE</span><h1>Say <em>hello.</em></h1><p>Private conversations. Real connections.</p></div>

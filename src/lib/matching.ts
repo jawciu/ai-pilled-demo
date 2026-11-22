@@ -7,12 +7,49 @@ export function cosine(a?: number[], b?: number[]) {
   return x && y ? dot / Math.sqrt(x * y) : 0;
 }
 
+const topicAliases: Record<string, string> = {
+  productization: 'production-readiness',
+  productisation: 'production-readiness',
+  'demo-to-production': 'production-readiness',
+  'prototype-to-production': 'production-readiness',
+  'ui-design': 'interface-design',
+  'user-interface-design': 'interface-design',
+  'graphic-design': 'visual-design'
+};
+const coveredNeeds: Record<string, readonly string[]> = {
+  'production-readiness': ['deployment', 'web-deployment'],
+  'vercel-deployment': ['deployment', 'web-deployment', 'nextjs-deployment'],
+  'nextjs-deployment': ['deployment', 'web-deployment'],
+  'web-deployment': ['deployment'],
+  'app-store-deployment': ['deployment', 'mobile-app-deployment'],
+  'mobile-app-deployment': ['deployment'],
+  'interface-design': ['visual-design', 'design-feedback'],
+  'visual-design': ['interface-design', 'design-feedback']
+};
+const deploymentPlatforms: Record<string, string> = {
+  'vercel-deployment': 'web', 'nextjs-deployment': 'web', 'web-deployment': 'web',
+  'app-store-deployment': 'mobile', 'mobile-app-deployment': 'mobile', 'flutter-deployment': 'mobile'
+};
+const debuggingTools: Record<string, string> = {
+  'react-debugging': 'react', 'pandas-debugging': 'pandas'
+};
+function canonicalTopic(topic: string) {
+  const normalised = topic.trim().toLowerCase().replace(/[\s_]+/g, '-');
+  return topicAliases[normalised] || normalised;
+}
+function conflictingTools(need: string, offer: string) {
+  return [deploymentPlatforms, debuggingTools].some(group => group[need] && group[offer] && group[need] !== group[offer]);
+}
 function pairScore(need: Topic, offer: Topic) {
   if (!need.specific || !offer.specific) return 0;
-  const exact = need.topic.toLowerCase() === offer.topic.toLowerCase();
+  const requested = canonicalTopic(need.topic);
+  const offered = canonicalTopic(offer.topic);
+  if (conflictingTools(requested, offered)) return 0;
   const semantic = cosine(need.vector, offer.vector);
-  if (!exact && semantic < 0.84) return 0;
-  return (exact ? 2 : 0) + semantic + Math.min(need.evidence.length, offer.evidence.length, 100) / 1000;
+  const detail = Math.min(need.evidence.length, offer.evidence.length, 100) / 1000;
+  if (requested === offered) return 3 + Math.max(0, semantic) + detail;
+  if (coveredNeeds[offered]?.includes(requested)) return 2.5 + Math.max(0, semantic) / 4 + detail;
+  return semantic >= 0.84 ? 1 + semantic + detail : 0;
 }
 
 export function recommendations(me: Person, people: Person[], direction: 'receive' | 'give'): Match[] {

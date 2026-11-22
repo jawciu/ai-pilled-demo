@@ -7,7 +7,7 @@ async function join(page: Page) {
   await page.getByRole('button', { name: 'Find my people' }).click();
   await expect(page.getByRole('heading', { name: 'A little help. Both ways.' })).toBeVisible();
 }
-async function nav(page: Page, name: string) {
+async function nav(page: Page, name: string | RegExp) {
   const mobile = page.viewportSize()!.width <= 760;
   const navigation = page.getByRole('navigation', { name: mobile ? 'Mobile navigation' : 'Main navigation', exact: true });
   await expect(navigation).toBeVisible();
@@ -70,6 +70,25 @@ test('suggested opening question survives repeated conversation navigation', asy
   }
   await nav(page, 'Inbox');
   await expect(page.locator('.conversation-row')).toHaveCount(1);
+});
+test('the room exposes the full count and clears a stale search on return', async ({ page }) => {
+  await join(page);
+  await nav(page, /^The room/);
+  const search = page.getByRole('textbox', { name: 'Find a name or topic' });
+  const total = await page.locator('.room-grid .person-card').count();
+  expect(total).toBeGreaterThan(3);
+  await search.fill(' Theo ');
+  await expect(page.locator('.room-grid .person-card')).toHaveCount(1);
+  await expect(page.getByRole('status')).toContainText(`Showing 1 of ${total} people`);
+  await page.getByRole('button', { name: 'Clear search', exact: true }).click();
+  await expect(search).toHaveValue('');
+  await expect(page.locator('.room-grid .person-card')).toHaveCount(total);
+  await search.fill('Theo');
+  await nav(page, 'For you');
+  await nav(page, /^The room/);
+  await expect(search).toHaveValue('');
+  await expect(page.locator('.room-grid .person-card')).toHaveCount(total);
+  await expect(page.getByRole('status')).toContainText(`Showing ${total} of ${total} people`);
 });
 test('landing and onboarding fit a phone without horizontal scrolling', async ({ page }) => {
   await page.goto('/');

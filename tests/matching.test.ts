@@ -64,6 +64,64 @@ test('semantic paraphrases can surface without exact topic labels', () => {
   assert.equal(recommendations(a, [b], 'receive').length, 1);
   assert.equal(cosine([1,0], [0,1]), 0);
 });
+const ian = {
+  ...maya, id: 'ian-regression', name: 'Ian',
+  need: 'designing things that people like', offer: 'turning demos into production products',
+  interpretation: { version: 1, model: 'cached-live-regression',
+    needs: [{ topic: 'interface-design', summary: 'Designing things people like', evidence: 'designing things that people like', specific: true, vector: [1, 0] }],
+    offers: [{ topic: 'productization', summary: 'Taking demos into production', evidence: 'turning demos into production products', specific: true, vector: [0.41, Math.sqrt(1 - 0.41 ** 2)] }]
+  }
+};
+const caroline = {
+  ...people[1], id: 'caroline-regression', name: 'Caroline',
+  need: "I don't know how to deploy things", offer: 'visual design and photoshop',
+  interpretation: { version: 1, model: 'cached-live-regression',
+    needs: [{ topic: 'deployment', summary: 'Getting help deploying', evidence: "I don't know how to deploy things", specific: true, vector: [1, 0] }],
+    offers: [{ topic: 'visual-design', summary: 'Visual design and Photoshop', evidence: 'visual design and photoshop', specific: true, vector: [0.548, Math.sqrt(1 - 0.548 ** 2)] }]
+  }
+};
+test('Ian and Caroline connect in both directions despite different labels and low embedding similarity', () => {
+  assert.deepEqual(recommendations(ian, [caroline], 'receive').map(m => m.person.name), ['Caroline']);
+  assert.deepEqual(recommendations(caroline, [ian], 'receive').map(m => m.person.name), ['Ian']);
+  assert.deepEqual(recommendations(ian, [caroline], 'give').map(m => m.person.name), ['Caroline']);
+  assert.deepEqual(recommendations(caroline, [ian], 'give').map(m => m.person.name), ['Ian']);
+});
+test('related-topic explanations keep the original offers without inventing tool expertise', () => {
+  const match = recommendations(caroline, [ian], 'receive')[0];
+  assert.ok(match.explanation.includes('turning demos into production products'));
+  assert.ok(match.explanation.includes("I don't know how to deploy things"));
+  assert.ok(!match.explanation.includes('Vercel'));
+  assert.ok(!match.explanation.includes('expert'));
+});
+test('an exact specific topic ranks above a related design offer', () => {
+  const direct = { ...caroline, id: 'direct-design', name: 'Direct design helper', interpretation: {
+    ...caroline.interpretation, offers: [{ ...caroline.interpretation.offers[0], topic: 'interface-design', vector: [0, 1] }]
+  } };
+  assert.deepEqual(recommendations(ian, [caroline, direct], 'receive').map(m => m.person.id), ['direct-design', 'caroline-regression']);
+});
+test('production-readiness aliases cover a general deployment need', () => {
+  const helper = { ...ian, interpretation: { ...ian.interpretation,
+    offers: [{ ...ian.interpretation.offers[0], topic: 'prototype-to-production' }]
+  } };
+  assert.equal(recommendations(caroline, [helper], 'receive').length, 1);
+});
+test('topic coverage does not bypass missing or non-specific AI analysis', () => {
+  assert.equal(recommendations(caroline, [{ ...ian, interpretation: null }], 'receive').length, 0);
+  const vague = { ...ian, interpretation: { ...ian.interpretation,
+    offers: [{ ...ian.interpretation.offers[0], specific: false }]
+  } };
+  assert.equal(recommendations(caroline, [vague], 'receive').length, 0);
+});
+test('explicit platform and tool conflicts remain excluded even with identical embeddings', () => {
+  const robin = people.find(p => p.name === 'Robin')!;
+  const sam = people.find(p => p.name === 'Sam')!;
+  const mobileNeed = { ...robin, interpretation: { ...robin.interpretation!, needs: robin.interpretation!.needs.map(t => ({ ...t, vector: [1, 0] })) } };
+  const webOffer = { ...people[1], interpretation: { ...people[1].interpretation!, offers: people[1].interpretation!.offers.filter(t => t.topic === 'vercel-deployment').map(t => ({ ...t, vector: [1, 0] })) } };
+  assert.equal(recommendations(mobileNeed, [webOffer], 'receive').length, 0);
+  const reactNeed = { ...maya, interpretation: { ...maya.interpretation!, needs: maya.interpretation!.needs.map(t => ({ ...t, vector: [1, 0] })) } };
+  const pandasOffer = { ...sam, interpretation: { ...sam.interpretation!, offers: sam.interpretation!.offers.map(t => ({ ...t, vector: [1, 0] })) } };
+  assert.equal(recommendations(reactNeed, [pandasOffer], 'receive').length, 0);
+});
 test('input validation rejects whitespace and oversized messages', () => {
   assert.equal(messageSchema.safeParse('  ').success, false);
   assert.equal(messageSchema.safeParse('x'.repeat(2001)).success, false);

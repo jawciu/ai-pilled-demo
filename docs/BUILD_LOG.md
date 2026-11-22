@@ -73,11 +73,24 @@ Two actual UI bugs were observed on the initial deployment:
 1. The suggested opening question was sometimes cleared when opening a conversation. The active-conversation effect raced a timed draft assignment. Fixed by setting the draft explicitly when opening a profile conversation, and clearing it only on deliberate navigation.
 2. A successfully retried message remained in the composer, making an accidental second send possible. Fixed by clearing the matching sent draft on successful retry while preserving any different text the user has typed.
 
-Both fixes passed the integration run using the locally built app connected to the real Supabase test event. All 12 matching/database tests, all 10 mobile/desktop browser tests (including a new repeated-conversation regression), the production build and TypeScript checks passed. The deployed fixes still need a reviewed GitHub push and a post-deployment rerun before claiming the production bugs are resolved.
+Both fixes passed the integration run using the locally built app connected to the real Supabase test event. All 12 matching/database tests, all 10 mobile/desktop browser tests (including a new repeated-conversation regression), the production build and TypeScript checks passed. The organiser approved the push of `b5fc793`; Vercel deployed it successfully and the strict production integration run then passed, including both draft fixes.
 
 A separate test assertion initially looked for an exact error string in an element that also contained a retry button; corrected the locator to check the displayed error container. This was a test-selector correction, not a product fix.
 
 Still required: two physical-device checks, event Wi-Fi sign-in-limit review, privacy/retention decisions and final QR verification. Automated Chromium mobile emulation is not a physical phone test.
+
+## Milestone 3 — related concepts and finding people in the room
+
+Real organiser feedback: two trial profiles should connect, but did not. Ian needed “designing things that people like” and offered “turning demos into production products”; Caroline needed “I don't know how to deploy things” and offered “visual design and photoshop”. The cached AI interpretation succeeded, but used interface-design vs visual-design and deployment vs productization. Both pairs failed the old exact-label/similarity gate.
+
+A separate visibility concern was investigated without accessing either participant's private session or messages. Both profiles belonged to the same test event and rendered in the deployed room from an independent authorised session. On mobile, both were below the initial viewport. The organiser confirmed that searching for the other name did find the profile. This established a discoverability problem rather than evidence of a permissions defect.
+
+Approved changes:
+- Show recently updated profiles first, report how many people are shown, trim search whitespace, expose Clear search, and reset search/scroll on navigation.
+- Add explicit relationships over valid cached AI topics, including production-readiness covering general deployment and visual/interface design supporting related design needs. Exact specific topics still rank first. Keep the semantic cutoff unchanged and explicitly reject known conflicting tools/platforms.
+- Keep failed or stale AI interpretations unmatched. No keyword fallback, database migration, permission change or AI rerun over the guest list.
+
+Verification before publication: all 22 logic/database tests, all 12 mobile/desktop browser tests, TypeScript and the production build passed. The actual cached Ian/Caroline interpretations were fetched through an authorised test participant and evaluated by the changed matching function: each now recommends the other in both directions, with explanations quoting their actual answers. Room selection was also checked for each viewer ID as a pure function, without authenticating as those people. A reviewed push and production verification are still required for this milestone.
 
 ## Suggested six-minute demonstration
 
