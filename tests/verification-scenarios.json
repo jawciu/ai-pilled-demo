@@ -1,0 +1,19 @@
+{
+  "event":"ai-pilled-test-2026",
+  "purpose":"Fresh verification cases specified after the first repaired run exposed speculative adjacent matches, before running the stricter acceptance policy.",
+  "profiles":[
+    {"id":"fresh-checkout","name":"[VERIFY] Quinn","need":"People abandon my checkout and I can't tell whether the labels make sense. I want to watch a few people try it and learn where they get confused, not just make it prettier.","offer":"I can spot low colour contrast and suggest more readable text sizes on a phone."},
+    {"id":"fresh-observe","name":"[VERIFY] Avery R","need":"My web page looks like a wall of text. Can someone help with typography and a clearer visual hierarchy?","offer":"I run small usability sessions: asking people to try a rough prototype, think aloud and show where they get stuck."},
+    {"id":"fresh-type","name":"[VERIFY] Jules D","need":"My colleagues cannot open the website I run locally. I want to publish a version they can use through a normal link.","offer":"I can help make a web page easier to scan through type sizes, spacing and visual hierarchy. I don't fix code or set up hosting."},
+    {"id":"fresh-host","name":"[VERIFY] Kai H","need":"I need help making the small pale-grey text on my mobile form easier to read.","offer":"I can host and deploy a small website and help connect its public address. I don't run usability research."}
+  ],
+  "checks":[
+    {"need":"fresh-checkout","offer":"fresh-observe","expected":true,"reason":"Observing checkout confusion through user sessions versus explicit usability-session offer."},
+    {"need":"fresh-observe","offer":"fresh-type","expected":true,"reason":"Text-heavy page hierarchy versus typography/spacing offer."},
+    {"need":"fresh-type","offer":"fresh-host","expected":true,"reason":"Let colleagues open a local site via a link versus website hosting/deployment."},
+    {"need":"fresh-host","offer":"fresh-checkout","expected":true,"reason":"Hard-to-read pale phone text versus contrast/text-size help."},
+    {"need":"fresh-checkout","offer":"fresh-host","expected":false,"reason":"Hosting with explicit exclusion of research does not answer usability-research need."},
+    {"need":"fresh-type","offer":"fresh-observe","expected":false,"reason":"Running usability sessions does not promise deployment."},
+    {"need":"fresh-host","offer":"fresh-host","expected":false,"reason":"Self-recommendation remains excluded regardless of relevance."}
+  ]
+}

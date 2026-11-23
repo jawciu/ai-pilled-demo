@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { reviewAnswers, reviewFailureCode } from '@/lib/ai-matching';
 import { reviewIsCurrent } from '@/lib/reviewed-matching';
 import type { MatchReview, Person } from '@/lib/types';
+import { compatibleTaskScope } from '@/lib/task-scope';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 export async function POST(request: Request) {
@@ -29,10 +30,12 @@ export async function POST(request: Request) {
       const a = people.get(job.requester_id), b = people.get(job.helper_id);
       return a && b && reviewIsCurrent(job,a,b);
     });
-    const decisions = valid.length ? await reviewAnswers(valid.map(job => ({ need: people.get(job.requester_id)!.need, offer: people.get(job.helper_id)!.offer }))) : [];
+    const candidates = valid.filter(job => compatibleTaskScope(people.get(job.requester_id)!,people.get(job.helper_id)!));
+    const decisions = candidates.length ? await reviewAnswers(candidates.map(job => ({ need: people.get(job.requester_id)!.need, offer: people.get(job.helper_id)!.offer }))) : [];
+    const byLease = new Map(candidates.map((job,index) => [job.lease_id,decisions[index]]));
     for (let i = 0; i < valid.length; i++) {
       const job = valid[i];
-      const { index: _index, ...decision } = decisions[i];
+      const { index: _index, ...decision } = byLease.get(job.lease_id) || { index: 0, level: 'none', need_evidence: '', offer_evidence: '', topic: '', opening: '' };
       const { error: saveError } = await admin.from('match_reviews').update({ status: 'ready', decision, updated_at: new Date().toISOString() })
         .eq('requester_id',job.requester_id).eq('helper_id',job.helper_id)
         .eq('requester_version',job.requester_version).eq('helper_version',job.helper_version)

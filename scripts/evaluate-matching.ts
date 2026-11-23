@@ -12,11 +12,13 @@ const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://tzndmqndeskxinqnyou
 const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_dG8mZUkm6UceuU2qa9MtoA_gEim2DDa';
 const original = JSON.parse(await readFile(`${root}/tests/real-world-scenarios.json`,'utf8'));
 const held = JSON.parse(await readFile(`${root}/tests/held-out-scenarios.json`,'utf8'));
-if (original.event !== 'ai-pilled-test-2026' || held.event !== original.event) throw new Error('Refusing to seed any event except the isolated test room');
-const profiles:Fixture[]=[...original.profiles,...held.profiles];
+const fresh = JSON.parse(await readFile(`${root}/tests/verification-scenarios.json`,'utf8'));
+if (original.event !== 'ai-pilled-test-2026' || held.event !== original.event || fresh.event !== original.event) throw new Error('Refusing to seed any event except the isolated test room');
+const profiles:Fixture[]=[...original.profiles,...held.profiles,...fresh.profiles];
 const checks:Check[]=[...original.checks,...held.checks,
   {need:'visual',offer:'reporter',expected:false,reason:'Discovered weak connection: writing clarity does not establish feature-scoping help'},
-  {need:'held-writing',offer:'french',expected:true,reason:'Discovered dropped French translation offer must be retained'}
+  {need:'held-writing',offer:'french',expected:true,reason:'Discovered dropped French translation offer must be retained'},
+  ...fresh.checks
 ];
 const directory=`${root}/.tmp/scenarios`;
 await mkdir(directory,{recursive:true});
@@ -49,17 +51,37 @@ async function prepare(profile:Fixture) {
   } catch(error) { const message=error && typeof error==='object' && 'message' in error?String(error.message):String(error); failures.push({id:profile.id,stage:'extraction',message});console.log('ERROR',profile.id,message); }
 }
 await Promise.all([0,1].map(async()=>{while(cursor<profiles.length) await prepare(profiles[cursor++]);}));
+async function apiFetch(id:string,path:string,method='GET') {
+  const client=clients.get(id)!;
+  const state=await client.db.auth.getSession();
+  if(state.data.session && (state.data.session.expires_at||0)*1000-Date.now()<180000) {
+    const refreshed=await client.db.auth.refreshSession();
+    if(refreshed.error||!refreshed.data.session) throw new Error('Evaluation session refresh failed');
+    client.token=refreshed.data.session.access_token;
+    await writeFile(`${directory}/${id}-session.json`,JSON.stringify({access_token:client.token,refresh_token:refreshed.data.session.refresh_token}));
+  }
+  const send=()=>fetch(`${base}${path}`,{method,headers:{Authorization:`Bearer ${client.token}`},signal:AbortSignal.timeout(65000)});
+  let response=await send();
+  if(response.status===401) {
+    const refreshed=await client.db.auth.refreshSession();
+    if(refreshed.error||!refreshed.data.session) return response;
+    client.token=refreshed.data.session.access_token;
+    await writeFile(`${directory}/${id}-session.json`,JSON.stringify({access_token:client.token,refresh_token:refreshed.data.session.refresh_token}));
+    response=await send();
+  }
+  return response;
+}
 let freshBatches=0;
 for(let round=0;round<15;round++) {
   let pending=0;
   for(const [id,client] of clients) {
     if(!extraction[id]) continue;
-    const response=await fetch(`${base}/api/recommendations`,{headers:{Authorization:`Bearer ${client.token}`}});
+    const response=await apiFetch(id,'/api/recommendations');
     const result=await response.json();
     if(!response.ok) {failures.push({id,stage:'recommendations',message:result.error});continue;}
     pending+=result.pending||0;
     if(result.pending>0) {
-      const checked=await fetch(`${base}/api/review`,{method:'POST',headers:{Authorization:`Bearer ${client.token}`},signal:AbortSignal.timeout(65000)});
+      const checked=await apiFetch(id,'/api/review','POST');
       const output=await checked.json();
       if(!checked.ok) failures.push({id,stage:'review',message:`${checked.status}: ${output.error}`});
       if(output.reviewed>0) freshBatches++;
@@ -71,12 +93,12 @@ for(let round=0;round<15;round++) {
 }
 const recommendations:Record<string,any>={};
 for(const [id,client] of clients) {
-  const response=await fetch(`${base}/api/recommendations`,{headers:{Authorization:`Bearer ${client.token}`}});
+  const response=await apiFetch(id,'/api/recommendations');
   if(response.ok) recommendations[id]=await response.json();
 }
 const results=checks.map((check,index)=>{
   const helper=clients.get(check.offer),requester=clients.get(check.need),list=recommendations[check.need];
-  const group=index<original.checks.length?'original':index<original.checks.length+held.checks.length?'held-out':'discovered';
+  const group=index<original.checks.length?'original':index<original.checks.length+held.checks.length?'held-out':index<original.checks.length+held.checks.length+2?'discovered':'fresh-verification';
   if(!helper || !requester || !list || !extraction[check.need] || !extraction[check.offer] || list.pending) return {...check,group,outcome:'UNVERIFIED'};
   const rank=list.receive.findIndex((m:any)=>m.person.id===helper.uid);
   const match=list.receive[rank];
@@ -88,7 +110,7 @@ const explicitFrench=extraction.french?.offers.some((t:any)=>t.evidence.includes
 const openers=Object.values(recommendations).flatMap((r:any)=>[...r.receive,...r.give].map((m:any)=>m.question));
 const acceptedQuestionLimits=openers.every((q:string)=>q.length<=205 && /[?？]/u.test(q));
 const summarize=(group:string)=>{const selected=results.filter(r=>r.group===group);return{total:selected.length,passed:selected.filter(r=>r.outcome==='PASS').length,missed:selected.filter(r=>r.outcome==='MISSED_MATCH').length,falsePositives:selected.filter(r=>r.outcome==='FALSE_POSITIVE').length,unverified:selected.filter(r=>r.outcome==='UNVERIFIED').length};};
-const summary={profiles:profiles.length,extracted:Object.keys(extraction).length,original:summarize('original'),'held-out':summarize('held-out'),discovered:summarize('discovered'),explicitFrenchOffersRetained:!!explicitFrench,acceptedQuestionLimits,freshBatches};
+const summary={profiles:profiles.length,extracted:Object.keys(extraction).length,original:summarize('original'),'held-out':summarize('held-out'),discovered:summarize('discovered'),freshVerification:summarize('fresh-verification'),explicitFrenchOffersRetained:!!explicitFrench,acceptedQuestionLimits,freshBatches};
 await writeFile(`${directory}/repaired-results.json`,JSON.stringify({timestamp:new Date().toISOString(),base,event:original.event,summary,failures,checks:results,extraction,recommendations},null,2));
 console.log('SUMMARY',JSON.stringify(summary));
 for(const result of results) console.log(result.outcome,result.group,`${result.need} <- ${result.offer}`,'rank' in result?result.rank:'');

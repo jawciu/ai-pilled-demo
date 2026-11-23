@@ -4,6 +4,7 @@ import { validateReviewBatch, reviewAnswers, reviewFailureCode } from '../src/li
 import { reviewedRecommendations } from '../src/lib/reviewed-matching';
 import { demoPeople } from '../src/lib/demo';
 import type { MatchReview } from '../src/lib/types';
+import { compatibleTaskScope } from '../src/lib/task-scope';
 const [rawA,rawB,rawC] = demoPeople();
 const a = { ...rawA, interpretation: { ...rawA.interpretation!, pipeline: 2 } };
 const b = { ...rawB, interpretation: { ...rawB.interpretation!, pipeline: 2 } };
@@ -12,6 +13,23 @@ const accepted = { level: 'direct' as const, need_evidence: 'help debugging Reac
 function review(overrides: Partial<MatchReview> = {}): MatchReview {
   return { event_id: a.event_id,requester_id:a.id,helper_id:b.id,requester_version:1,helper_version:1,revision:2,status:'ready',lease_id:'lease',lease_until:'2026-01-01T00:00:00Z',decision:accepted,...overrides };
 }
+test('known task boundaries cannot be bypassed by a speculative model decision', () => {
+  const scoped=(need:string,offer:string)=>{
+    const requester={...a,interpretation:{...a.interpretation,needs:[{...a.interpretation.needs[0],topic:need}]}};
+    const helper={...b,interpretation:{...b.interpretation,offers:[{...b.interpretation.offers[0],topic:offer}]}};
+    return compatibleTaskScope(requester,helper);
+  };
+  assert.equal(scoped('user-research','translation-french-english'),false);
+  assert.equal(scoped('css-debugging','interface-design'),false);
+  assert.equal(scoped('web-deployment','react-debugging'),false);
+  assert.equal(scoped('ai-data-privacy','web-deployment'),false);
+  assert.equal(scoped('deployment','production-readiness'),true);
+  assert.equal(scoped('interface-design','visual-design'),true);
+  assert.equal(scoped('unfamiliar-useful-task','unfamiliar-offer'),true);
+});
+test('speculative related decisions are not shown as useful introductions', () => {
+  assert.equal(reviewedRecommendations(a,[b],[review({decision:{...accepted,level:'related'}})]).receive.length,0);
+});
 test('failure codes expose categories without participant text or keys', () => {
   assert.equal(reviewFailureCode(new Error('AI service returned 400')),'ai_service_returned_400');
   assert.equal(reviewFailureCode(new Error('Could not cache connection check')),'could_not_cache_connection_check');
