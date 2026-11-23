@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { reviewAnswers } from '@/lib/ai-matching';
+import { reviewAnswers, reviewFailureCode } from '@/lib/ai-matching';
 import { reviewIsCurrent } from '@/lib/reviewed-matching';
 import type { MatchReview, Person } from '@/lib/types';
 export const runtime = 'nodejs';
@@ -41,11 +41,12 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ reviewed: valid.length });
   } catch (error) {
-    console.error('Connection review failed',{ type: error instanceof Error ? error.name : 'unknown' });
+    const code = reviewFailureCode(error);
+    console.error('Connection review failed',{ code });
     for (const job of jobs) await admin.from('match_reviews').update({ status: 'failed', decision: null, lease_until: new Date(Date.now()+60000).toISOString(), updated_at: new Date().toISOString() })
       .eq('requester_id',job.requester_id).eq('helper_id',job.helper_id)
       .eq('requester_version',job.requester_version).eq('helper_version',job.helper_version)
       .eq('revision',job.revision).eq('lease_id',job.lease_id).eq('status','processing');
-    return NextResponse.json({ error: 'We couldn’t check some connections. We’ll retry shortly; no guessed introductions have been added.' }, { status: 502, headers: { 'Retry-After': '60' } });
+    return NextResponse.json({ code, error: 'We couldn’t check some connections. We’ll retry shortly; no guessed introductions have been added.' }, { status: 502, headers: { 'Retry-After': '60' } });
   }
 }

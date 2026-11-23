@@ -5,7 +5,8 @@ import { resolve } from 'node:path';
 
 type Fixture = { id:string; name:string; need:string; offer:string };
 type Check = { need:string; offer:string; expected:boolean; reason:string };
-const root = resolve(import.meta.dirname,'..');
+async function main() {
+const root = resolve(process.argv[1],'../..');
 const base = process.env.EVALUATION_ORIGIN || 'https://ai-pilled-demo.vercel.app';
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://tzndmqndeskxinqnyouv.supabase.co';
 const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_dG8mZUkm6UceuU2qa9MtoA_gEim2DDa';
@@ -92,3 +93,5 @@ await writeFile(`${directory}/repaired-results.json`,JSON.stringify({timestamp:n
 console.log('SUMMARY',JSON.stringify(summary));
 for(const result of results) console.log(result.outcome,result.group,`${result.need} <- ${result.offer}`,'rank' in result?result.rank:'');
 if(results.some(r=>r.outcome!=='PASS')||!explicitFrench||!acceptedQuestionLimits||failures.length) process.exitCode=1;
+}
+void main().catch(error => { console.error(error instanceof Error ? error.message : String(error)); process.exitCode=1; });

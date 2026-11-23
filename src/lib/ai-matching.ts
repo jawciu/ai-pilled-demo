@@ -46,6 +46,16 @@ export function validateReviewBatch(raw: unknown, inputs: ReviewInput[]): Review
   }
   return decisions.sort((a,b) => a.index-b.index);
 }
+export function reviewFailureCode(error: unknown) {
+  if (error instanceof z.ZodError) return 'invalid_review_shape';
+  if (error instanceof SyntaxError) return 'invalid_review_json';
+  if (!(error instanceof Error)) return 'unknown_review_error';
+  const known = ['Incomplete matching review','Invalid review index','Unsupported rejected review','Unsupported matching evidence','Invalid opening question','Could not read matching profiles','Could not cache connection check'];
+  if (known.includes(error.message)) return error.message.toLowerCase().replaceAll(' ','_');
+  if (/^AI service returned \d{3}$/.test(error.message)) return error.message.toLowerCase().replaceAll(' ','_');
+  if (error.name === 'TimeoutError' || error.name === 'AbortError') return 'ai_timeout';
+  return 'unknown_review_error';
+}
 export async function openaiJSON(path: string, body: object) {
   const response = await fetch(`https://api.openai.com/v1/${path}`, {
     method: 'POST', headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },

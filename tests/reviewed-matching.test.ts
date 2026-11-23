@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateReviewBatch, reviewAnswers } from '../src/lib/ai-matching';
+import { validateReviewBatch, reviewAnswers, reviewFailureCode } from '../src/lib/ai-matching';
 import { reviewedRecommendations } from '../src/lib/reviewed-matching';
 import { demoPeople } from '../src/lib/demo';
 import type { MatchReview } from '../src/lib/types';
@@ -12,6 +12,12 @@ const accepted = { level: 'direct' as const, need_evidence: 'help debugging Reac
 function review(overrides: Partial<MatchReview> = {}): MatchReview {
   return { event_id: a.event_id,requester_id:a.id,helper_id:b.id,requester_version:1,helper_version:1,revision:2,status:'ready',lease_id:'lease',lease_until:'2026-01-01T00:00:00Z',decision:accepted,...overrides };
 }
+test('failure codes expose categories without participant text or keys', () => {
+  assert.equal(reviewFailureCode(new Error('AI service returned 400')),'ai_service_returned_400');
+  assert.equal(reviewFailureCode(new Error('Could not cache connection check')),'could_not_cache_connection_check');
+  assert.equal(reviewFailureCode(new Error('Secret participant text or token')),'unknown_review_error');
+  assert.equal(reviewFailureCode(new SyntaxError('Private model response')),'invalid_review_json');
+});
 test('live recommendations require checked evidence, not an exact topic label', () => {
   const result = reviewedRecommendations(a,[a,b],[]);
   assert.equal(result.receive.length,0); assert.ok(result.pending>0);
