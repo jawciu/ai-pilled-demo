@@ -58,8 +58,18 @@ test('unsupported excerpts, incomplete batches and duplicate indexes fail closed
   assert.throws(()=>validateReviewBatch({decisions:[{...accepted,index:0,opening:'x'.repeat(151)}]},input));
   assert.throws(()=>validateReviewBatch({decisions:[{...accepted,index:0},{...accepted,index:0}]},[...input,...input]));
   assert.throws(()=>validateReviewBatch({decisions:[{...accepted,index:5}]},input));
-  assert.throws(()=>validateReviewBatch({decisions:[{...accepted,index:0,level:'none'}]},input));
+  const rejection = validateReviewBatch({decisions:[{...accepted,index:0,level:'none'}]},input)[0];
+  assert.deepEqual(rejection,{index:0,level:'none',need_evidence:'',offer_evidence:'',topic:'',opening:''});
   assert.equal(reviewedRecommendations(a,[b],[review({decision:{...accepted,offer_evidence:'fictional invented skill'}})]).receive.length,0);
+});
+test('rejected pairs with explanatory metadata do not break valid matches in the same batch', () => {
+  const rejected = { index: 1, level: 'none', need_evidence: 'not needed'.repeat(40), offer_evidence: 'different skill', topic: 'unrelated', opening: 'This introduction would not help.' };
+  const result = validateReviewBatch({decisions:[{...accepted,index:0},rejected]},[{need:a.need,offer:b.offer},{need:c.need,offer:a.offer}]);
+  assert.equal(result[0].level,'direct');
+  assert.equal(result[1].level,'none');
+  assert.equal(result[1].need_evidence,'');
+  assert.equal(result[1].opening,'');
+  assert.equal(reviewedRecommendations(a,[b],[review({decision:{...accepted,level:'none'}})]).receive.length,0);
 });
 test('an unrelated third participant cannot affect a checked pair', () => {
   const result = reviewedRecommendations(a,[a,b,c],[review()]);
