@@ -7,7 +7,7 @@ A mobile-first meetup companion: share what you need, share what you can offer, 
 - Next.js app with mobile and desktop layouts.
 - `/demo`: fictional rehearsal profiles and browser-local messages. Fixtures are explicitly human-labelled, NOT live AI output. A simulated reply button is explicitly labelled. Custom rehearsal answers produce no matches unless they are an exact fixture; there is no keyword fallback.
 - `/e/<event-slug>`: Supabase-backed live flow, requiring the database setup below.
-- Cached server-side OpenAI structured extraction and embeddings; independent directional matching. No percentages, assigned pairs, selfies or blocking.
+- Cached server-side OpenAI structured extraction and answer-to-answer relevance checks; independent directional matching. No percentages, assigned pairs, selfies or blocking.
 - Database-owned conversation uniqueness, retry-safe messages, unread receipts and rate limits.
 - Realtime message/profile updates with 5-second polling recovery. Only visible tabs poll.
 
@@ -17,12 +17,12 @@ Node 22+ and npm. `npm install`, then `npm run dev`. Open http://localhost:3000.
 
 The public Supabase URL and publishable key supplied by the organiser are configured in the ignored `.env.local`. `.env.example` documents all variables. Public keys are not authentication secrets; database permissions are essential.
 
-Server-only variables: `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`. Set these through a trusted environment-file editor or Vercel's environment-variable UI, not chat. Never prefix them with `NEXT_PUBLIC_`, commit them, or include them in a project export. The service role is used ONLY to write verified AI interpretations; message reads and writes always use the participant's authenticated access and database permissions.
+Server-only variables: `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`. Set these through a trusted environment-file editor or Vercel's environment-variable UI, not chat. Never prefix them with `NEXT_PUBLIC_`, commit them, or include them in a project export. The service role is used ONLY to write verified AI interpretations and leased relevance-check results; message reads and writes always use the participant's authenticated access and database permissions.
 
 ## Supabase setup (organiser action)
 
 1. Use a dedicated Supabase project; enable Anonymous Sign-Ins under Authentication.
-2. Open SQL Editor → New query. Paste `supabase/setup.sql`, inspect it, then Run. It creates tables, restricted functions and row-level permissions. It does not import any real people.
+2. Open SQL Editor → New query. Paste `supabase/setup.sql`, inspect it, then Run. Next run `supabase/migrations/002_cached_match_reviews.sql`. For an existing project that already ran setup, run only the migration. It adds a cache and bounded worker-claim functions; it does not delete profiles or messages or weaken conversation permissions.
 3. The seed event URL is `/e/ai-pilled-room-84e2c9b7`. Before real use, choose a new hard-to-guess slug by editing the seed SQL before first execution, or updating the row in Table Editor → events. Do not change it after printing the QR code. A shared event URL is an entry link, NOT authentication to anyone's private conversations.
 4. Project Settings → API Keys: add the server-only legacy `service_role` key to Vercel as `SUPABASE_SERVICE_ROLE_KEY`. This project also supports Supabase's server secret key in that variable; never use the publishable key in its place. Do not paste either secret into chat.
 5. Verify messages and participants appear under Database → Publications → supabase_realtime. SQL enables them when that publication exists.
@@ -34,17 +34,17 @@ Never grant all authenticated users unrestricted messages access. Anonymous part
 
 Only the two profile answers are sent to OpenAI, as JSON data separated from fixed system instructions. Names, recognition descriptions and messages are not sent. Structured output is validated; evidence must be a verbatim substring of the corresponding answer. AI failures do not trigger keyword matching.
 
-Interpretations and 256-dimensional embeddings are cached in Postgres per answer version. Changing either answer atomically clears the cache and increments the version. A compare-and-set write rejects stale AI results. One AI attempt per participant per minute is enforced by a database claim; API timeouts are bounded. Name/recognition edits preserve analysis.
+Structured interpretations are cached in Postgres per answer version and extraction-pipeline revision. Changing either answer atomically clears the interpretation and increments its version. Old pipeline output is refreshed on the participant's next visit. A compare-and-set write rejects stale AI results. One extraction attempt per participant per minute is enforced by a database claim; API timeouts are bounded. Name/recognition edits preserve analysis.
 
-Exact specific topics rank first. A small, explicit topic-coverage layer recognises related AI-extracted concepts: production-readiness can cover general deployment, and visual design can support interface-design help. Known conflicting platforms/tools remain excluded. This uses valid cached AI interpretations, not a keyword fallback, and does not rerun AI over the guest list. Other specific paraphrases may surface at the unchanged embedding cosine threshold of 0.84. This is an internal engineering threshold, not a compatibility percentage. It needs evaluation on real model outputs; passing human-labelled fixture tests does not validate model quality. Different tools, negations, broad offers, prompt injection and learning-versus-offering cases are in the rehearsal set. A false positive can still occur, so explanations quote both answers for human judgement.
+Live introductions require an AI check of the actual directed need and offer, including exact-topic candidates. Direct useful help ranks above clearly useful adjacent help; unrelated, conflicting or unsupported offers are rejected. The check must return exact supporting excerpts and a short opening question. Topics identify non-empty supported needs/offers but no similarity cutoff silently discards their paraphrases. The previous topic/embedding matcher is retained ONLY for the explicitly labelled local demo and historical regression tests. No internal ranking value is displayed as a compatibility percentage. It needs evaluation on real model outputs; passing human-labelled fixture tests does not validate model quality. Different tools, negations, broad offers, prompt injection and learning-versus-offering cases are in the rehearsal set. A false positive can still occur, so explanations quote both answers for human judgement.
 
-Embeddings are compared on the server without additional OpenAI calls; raw vectors are not downloaded on ordinary profile refreshes. Recommendations are refreshed on profile-version changes. Messages never affect matching.
+For a 60–80-person event, all non-empty need/offer pairs involving a visiting participant are eligible, checked in batches of at most eight. Decisions—including rejections—are shared in Supabase and keyed by BOTH answer versions plus the review revision. A 90-second database lease prevents duplicate work across tabs or the two participants; failed batches back off for a minute. Cached decisions are read on page refresh, not regenerated. The browser drives subsequent batches while open, so introductions appear progressively and no closed-browser background processing is promised. New extraction no longer generates unused embeddings. Existing vectors may remain in old cache records but do not decide live matches. Messages never affect matching.
 
 ## Deploy to Vercel (after local verification)
 
 1. Connect authorised GitHub access in the workspace and push a reviewed milestone to `https://github.com/jawciu/ai-pilled-demo`.
 2. Vercel → Add New → Project → import that repository. Framework: Next.js. Standard install/build settings; no custom filesystem persistence.
-3. Settings → Environment Variables: add all variables in `.env.example`. The two `NEXT_PUBLIC_` values are browser-safe. `SUPABASE_SERVICE_ROLE_KEY` and `OPENAI_API_KEY` are server-only secrets. Use the same embedding model for all attendees; changing embedding models requires clearing and rebuilding interpretations.
+3. Settings → Environment Variables: add all variables in `.env.example`. The two `NEXT_PUBLIC_` values are browser-safe. `SUPABASE_SERVICE_ROLE_KEY` and `OPENAI_API_KEY` are server-only secrets. `OPENAI_EMBEDDING_MODEL` is a legacy variable and is no longer used by the repaired live pipeline.
 4. Deploy/redeploy after variables are set. Anonymous auth does not need an OAuth callback; set Supabase's Site URL to the production app URL for consistency.
 5. Verify the live event URL using the checklist in `docs/VERIFICATION.md` before sharing it. Generate a QR code for the exact production `/e/<slug>` link, not `/demo` or the landing page.
 
@@ -55,6 +55,7 @@ No application backend is deployed to BoltzHub; Vercel hosts the Next.js server 
 - `npm test`: deterministic matching fixtures and SQL executed against embedded PostgreSQL (PGlite), with independent participant identities and RLS.
 - `npm run test:e2e`: Chromium mobile emulation and desktop rehearsal UI. This is NOT proof of a successful real-device or deployed Supabase session.
 - `npm run typecheck` and `npm run build`.
+- `npx tsx scripts/evaluate-matching.ts`: paid real-service evaluation in the isolated test event only; reuses ignored `.tmp/scenarios/` anonymous sessions and writes `.tmp/scenarios/repaired-results.json`. Keeps the original 24 checks separate from held-out cases and discovered regressions. Requires the new migration and deployed pipeline; don't run against the old deployment and call it a repair result.
 - Live integration checks remain required after Supabase and OpenAI are configured.
 
 See `docs/BUILD_LOG.md` for real presentation notes and `docs/VERIFICATION.md` for remaining release gates.

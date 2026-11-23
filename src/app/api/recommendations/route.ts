@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { recommendations } from '@/lib/matching';
-import type { Person } from '@/lib/types';
+import { reviewedRecommendations } from '@/lib/reviewed-matching';
+import type { MatchReview, Person } from '@/lib/types';
 export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
   const authorization = request.headers.get('authorization');
@@ -15,6 +15,9 @@ export async function GET(request: Request) {
   if (readError) return NextResponse.json({ error: 'Could not load recommendations.' }, { status: 503 });
   const me = (people as Person[]).find(p => p.id === user.id);
   if (!me) return NextResponse.json({ receive: [], give: [] });
-  const trim = (direction: 'receive' | 'give') => recommendations(me, people as Person[], direction).map(match => ({ ...match, score: undefined, person: { ...match.person, interpretation: null } }));
-  return NextResponse.json({ receive: trim('receive'), give: trim('give') }, { headers: { 'Cache-Control': 'private, no-store' } });
+  const { data: reviews, error: reviewError } = await db.rpc('current_match_reviews');
+  if (reviewError) return NextResponse.json({ error: 'Connection checks need the matching database update. Your profile and inbox still work.' }, { status: 503 });
+  const result = reviewedRecommendations(me,people as Person[],reviews as MatchReview[]);
+  const trim = (matches: typeof result.receive) => matches.map(({ score: _score,...match }) => match);
+  return NextResponse.json({ ...result, receive: trim(result.receive), give: trim(result.give) }, { headers: { 'Cache-Control': 'private, no-store' } });
 }

@@ -1,0 +1,24 @@
+{
+  "event": "ai-pilled-test-2026",
+  "purpose": "Held-out paraphrases written before the repaired pipeline is run. All profiles are fictional.",
+  "profiles": [
+    {"id":"held-notes","name":"[HELDOUT] Taylor","need":"We paste customers' names and account balances into an AI tool when writing updates. I'd like help figuring out what to remove before sharing it.","offer":"I can interview potential customers to understand their current problems, without pitching my solution."},
+    {"id":"held-safe","name":"[HELDOUT] Reese","need":"The cards overlap when I shrink my browser to phone width. I need somebody to fix the CSS rules, not just suggest nicer colours.","offer":"I can help minimise sensitive information before using AI, including anonymising examples and removing identifiers. This isn't legal advice."},
+    {"id":"held-css","name":"[HELDOUT] Sky","need":"I have a theory that local shops need my app. I'd like help having useful conversations with shop owners before I start coding.","offer":"I troubleshoot flexbox, grid and media-query bugs that break pages on narrow screens."},
+    {"id":"held-writing","name":"[HELDOUT] Darcy","need":"J'ai besoin de traduire une courte description de mon application du français vers l'anglais.","offer":"I can rewrite technical descriptions in everyday language. I don't advise on which product features to build."},
+    {"id":"held-language","name":"[HELDOUT] Remy","need":"My first web project needs a public address. It works when I run it on my own computer and I don't know the next step.","offer":"Je peux traduire de courtes descriptions entre le français et l'anglais."},
+    {"id":"held-launch","name":"[HELDOUT] Drew","need":"I need someone to tell me which one of ten proposed features should go into a tiny first release.","offer":"I can help publish web prototypes so other people can use them, including setting up hosting and deployment."}
+  ],
+  "checks": [
+    {"need":"held-notes","offer":"held-safe","expected":true,"reason":"Removing sensitive customer identifiers before AI use versus anonymisation support."},
+    {"need":"held-safe","offer":"held-css","expected":true,"reason":"Overlapping phone-width cards versus flexbox/grid/media-query debugging."},
+    {"need":"held-css","offer":"held-notes","expected":true,"reason":"Talking to shop owners before building versus customer discovery interviews."},
+    {"need":"held-writing","offer":"held-language","expected":true,"reason":"Explicit French-to-English translation request and French-language translation offer."},
+    {"need":"held-language","offer":"held-launch","expected":true,"reason":"A local web project needing a public address versus publishing web prototypes."},
+    {"need":"held-launch","offer":"held-writing","expected":false,"reason":"Rewriting descriptions explicitly does not include choosing features."},
+    {"need":"held-safe","offer":"held-writing","expected":false,"reason":"Fixing responsive CSS is not writing clearer descriptions."},
+    {"need":"held-notes","offer":"held-launch","expected":false,"reason":"Deployment does not establish confidential AI data-handling advice."},
+    {"need":"held-css","offer":"held-language","expected":false,"reason":"Customer research is not translation."},
+    {"need":"held-language","offer":"held-css","expected":false,"reason":"CSS troubleshooting alone does not offer deployment."}
+  ]
+}

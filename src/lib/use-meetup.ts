@@ -27,7 +27,10 @@ export function useMeetup(slug: string, demo: boolean) {
   const [inbox, setInbox] = useState<InboxItem[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [matches, setMatches] = useState<{ receive: Match[]; give: Match[] }>({ receive: [], give: [] });
-  const matchSignature = useRef('');
+  const reviewInFlight = useRef(false);
+  const reviewRetryAt = useRef(0);
+  const [reviewPending, setReviewPending] = useState(0);
+  const [reviewError, setReviewError] = useState('');
   const [active, setActive] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -55,6 +58,18 @@ export function useMeetup(slug: string, demo: boolean) {
     }));
   }, []);
 
+  const runReview = useCallback(async (token: string) => {
+    if (reviewInFlight.current || Date.now() < reviewRetryAt.current) return;
+    reviewInFlight.current = true;
+    try {
+      const response = await fetch('/api/review', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Some connection checks could not finish. We’ll retry shortly.');
+      setReviewError('');
+    } catch (e) { setReviewError(errorText(e)); reviewRetryAt.current = Date.now()+60000; }
+    finally { reviewInFlight.current = false; }
+  }, []);
+
   const refresh = useCallback(async () => {
     if (refreshing.current || demo) return;
     refreshing.current = true;
@@ -63,7 +78,7 @@ export function useMeetup(slug: string, demo: boolean) {
       const { data: session } = await db.auth.getSession();
       if (!session.session) { setMe(null); setLoading(false); return; }
       const [profiles, chats, previews, event] = await Promise.all([
-        db.from('participants').select('id,event_id,name,need,offer,recognition,answer_version,updated_at,analysis_version:interpretation->version').order('name').limit(200),
+        db.from('participants').select('id,event_id,name,need,offer,recognition,answer_version,updated_at,analysis_version:interpretation->version,analysis_pipeline:interpretation->pipeline').order('name').limit(200),
         db.from('conversations').select('*'), db.rpc('get_inbox'), db.from('events').select('slug')
       ]);
       if (profiles.error) throw profiles.error;
@@ -72,18 +87,20 @@ export function useMeetup(slug: string, demo: boolean) {
       if (event.error) throw event.error;
       if (event.data.length && event.data[0].slug !== slug) throw new Error('This browser has joined a different event. Use your original event link or a separate browser session.');
       if (!mounted.current) return;
-      const mapped = profiles.data.map(p => ({ ...p, interpretation: p.analysis_version ? { version: p.analysis_version, needs: [], offers: [], model: '' } : null })) as Person[];
+      const mapped = profiles.data.map(p => ({ ...p, interpretation: p.analysis_version ? { version: p.analysis_version, pipeline: p.analysis_pipeline, needs: [], offers: [], model: '' } : null })) as Person[];
       setPeople(mapped);
       setMe(mapped.find(p => p.id === session.session!.user.id) || null);
-      const signature = JSON.stringify(profiles.data.map(p => [p.id, p.updated_at, p.answer_version, p.analysis_version]));
-      if (signature !== matchSignature.current) {
+      try {
+        const response = await fetch('/api/recommendations', { headers: { Authorization: `Bearer ${session.session.access_token}` }, cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Could not load recommendations. Please try again.');
+        setMatches({ receive: result.receive, give: result.give }); setRecommendationError('');
+        setReviewPending(result.pending || 0);
+        if (result.pending > 0) void runReview(session.session.access_token);
+        else setReviewError('');
+      } catch (e) {
         setMatches({ receive: [], give: [] });
-        try {
-          const response = await fetch('/api/recommendations', { headers: { Authorization: `Bearer ${session.session.access_token}` }, cache: 'no-store' });
-          if (!response.ok) throw new Error('Could not load recommendations. Please try again.');
-          const result = await response.json();
-          setMatches(result); matchSignature.current = signature; setRecommendationError('');
-        } catch { setRecommendationError('We couldn’t load recommendations. We’ll retry automatically. Your inbox still works.'); }
+        setRecommendationError(errorText(e));
       }
       setConversations(chats.data);
       setInbox(previews.data || []);
@@ -96,7 +113,7 @@ export function useMeetup(slug: string, demo: boolean) {
       setConnected(true);
     } catch (e) { setError(errorText(e)); setConnected(false); }
     finally { refreshing.current = false; setLoading(false); }
-  }, [demo, slug]);
+  }, [demo, slug, runReview]);
 
   useEffect(() => {
     mounted.current = true;
@@ -199,5 +216,5 @@ export function useMeetup(slug: string, demo: boolean) {
     syncDemo({ ...demoRef.current, messages: [...demoRef.current.messages, { id: crypto.randomUUID(), client_id: crypto.randomUUID(), conversation_id: convo.id,
       sender_id: other, body: 'This is a simulated rehearsal reply: happy to chat — I’m near the coffee table!', created_at: new Date().toISOString() }] });
   }
-  return { me, people, matches, conversations, inbox, messages, active, setActive, loading, busy, analysing, error, setError, analysisError, recommendationError, connected, save, start, send, markRead, analyse, refresh, simulateReply };
+  return { me, people, matches, conversations, inbox, messages, active, setActive, loading, busy, analysing, error, setError, analysisError, recommendationError, reviewPending, reviewError, connected, save, start, send, markRead, analyse, refresh, simulateReply };
 }
