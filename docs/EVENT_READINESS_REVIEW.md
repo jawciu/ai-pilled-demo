@@ -47,3 +47,17 @@ An additional read-only check compared all 48 directional recommendation lists t
 Live messaging/realtime checks and full/partial ordering checks passed against this production Supabase project using only the isolated test event. No live 80-person provider load or venue/device test was claimed.
 
 Attendee link: https://ai-pilled-demo.vercel.app/e/ai-pilled-room-84e2c9b7 . The existing attendee PNG QR was decoded and confirmed to contain this exact URL. The final script deliberately leaves time for joining and browsing; The room is available while introductions are processed.
+
+
+## Follow-up: connection recovery and presentation cleanup
+
+Additional client safeguards stagger polling (5–7 seconds) and retries (server/default delay plus 0–10 seconds), pause offline extraction without consuming retry attempts, and refresh when the phone reconnects or the page becomes visible. Read requests have 15-second deadlines and AI requests 75-second deadlines so dropped connections release the browser’s in-flight guards. Successful background recovery clears its own error without hiding a failed profile edit. Recommendation fetch failures continue to clear results, avoiding stale introductions after edited answers.
+
+These changes do not add an initial-extraction concurrency cap or guarantee provider/venue availability. The existing eight-worker pair-review cap and database leases remain. The matching algorithm and prompts are unchanged from the 43/43 fresh live evaluation.
+
+The original pilled font is restored. The header room label, sidebar slogan and requested form notice/checkbox/browser note are removed. No database consent record existed or was changed; that checkbox was a local form gate. Anyone with an event link can now browse/search that room and open profiles before joining. For you explains where personal recommendations will appear; Inbox keeps its join button. A guest choosing to message is directed to You, preserving their draft profile. Desktop sections now share a centred container inside the right-hand pane, with left-aligned text/fields; mobile width remains unchanged. The original test QR still targets `/e/ai-pilled-test-2026`.
+
+
+Guest reads use `/api/room?slug=...` with an exact event lookup and explicit profile-field allowlist. There are no new database permissions or migrations. The response excludes conversations, receipts, authentication data and AI analysis; messages still require a joined session. Unknown events return 404, invalid links 400, and error responses do not expose database details. The script now has 296 spoken words, including planning, database/AI/deployment configuration, design iteration and evaluation with fictional profiles; the real event uses attendees’ answers.
+
+Follow-up validation: all 52 logic/database tests, 30 desktop/mobile browser tests, TypeScript and production build passed. This includes guest browsing before signup, room scope, preserved drafts, stable cards during background refresh, desktop centring, timeouts and reconnection. Implementation commit `a3c6302` was pushed to main and Vercel confirmed deployment. Live unauthenticated guest reads passed for two separate test events (27 and 32 profiles): exact field allowlist, no AI analysis, no cross-event IDs. Missing slug returned 400, unknown event 404 and unauthenticated private recommendation/review routes 401. Browser inspection confirmed guest cards, profile viewing, messaging redirect to You and the centred desktop form.
