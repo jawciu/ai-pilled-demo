@@ -6,10 +6,10 @@ A mobile-first meetup companion: share what you need, share what you can offer, 
 
 - Next.js app with mobile and desktop layouts.
 - `/demo`: fictional rehearsal profiles and browser-local messages. Fixtures are explicitly human-labelled, NOT live AI output. A simulated reply button is explicitly labelled. Custom rehearsal answers produce no matches unless they are an exact fixture; there is no keyword fallback.
-- `/e/<event-slug>`: Supabase-backed live flow, requiring the database setup below.
+- `/e/<event-slug>`: Supabase-backed live flow, requiring the database setup below. Anyone with the event link can browse public profile cards before joining. Personal recommendations and messages require a joined participant session.
 - Cached server-side OpenAI structured extraction and answer-to-answer relevance checks; independent directional matching. No percentages, assigned pairs, selfies or blocking.
 - Database-owned conversation uniqueness, retry-safe messages, unread receipts and rate limits.
-- Realtime message/profile updates with 5-second polling recovery. Only visible tabs poll.
+- Realtime message/profile updates with staggered 5–7-second polling recovery. Only visible, online tabs poll; reconnecting or returning to the app refreshes immediately.
 
 ## Local development
 
@@ -34,7 +34,7 @@ Never grant all authenticated users unrestricted messages access. Anonymous part
 
 Only the two profile answers are sent to OpenAI, as JSON data separated from fixed system instructions. Names, recognition descriptions and messages are not sent. Structured output is validated; evidence must be a verbatim substring of the corresponding answer. AI failures do not trigger keyword matching.
 
-Structured interpretations are cached in Postgres per answer version and extraction-pipeline revision. Changing either answer atomically clears the interpretation and increments its version. Old pipeline output is refreshed on the participant's next visit. A compare-and-set write rejects stale AI results. One extraction attempt per participant per minute is enforced by a database claim; API timeouts are bounded. Transient extraction failures retry automatically up to three total attempts per answer version, respecting Retry-After or waiting 60 seconds. A manual retry remains available after that. Name/recognition edits preserve analysis.
+Structured interpretations are cached in Postgres per answer version and extraction-pipeline revision. Changing either answer atomically clears the interpretation and increments its version. Old pipeline output is refreshed on the participant's next visit. A compare-and-set write rejects stale AI results. One extraction attempt per participant per minute is enforced by a database claim; API timeouts are bounded. Transient extraction failures retry automatically up to three total attempts per answer version, respecting Retry-After or waiting 60 seconds, with up to ten extra seconds of jitter to spread retries. Offline attempts pause until reconnection. A manual retry remains available after that. Name/recognition edits preserve analysis.
 
 Live introductions require an AI check of the actual directed need and offer, including exact-topic candidates. Only offers supporting the actual requested task are accepted; speculative adjacent help is excluded. Compound topics may belong to several families. Known disjoint task families (for example translation versus user research, or visual feedback versus CSS implementation) cannot be promoted by a model verdict; unknown topics still get an AI check rather than a keyword fallback. The check must return exact supporting excerpts and a short opening question. Topics identify non-empty supported needs/offers but no similarity cutoff silently discards their paraphrases. The previous topic/embedding matcher is retained ONLY for the explicitly labelled local demo and historical regression tests. No internal ranking value is displayed as a compatibility percentage. It needs evaluation on real model outputs; passing human-labelled fixture tests does not validate model quality. Different tools, negations, broad offers, prompt injection and learning-versus-offering cases are in the rehearsal set. A false positive can still occur, so explanations quote both answers for human judgement.
 

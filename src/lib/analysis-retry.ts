@@ -4,13 +4,18 @@ export class AnalysisRequestError extends Error {
   }
 }
 export function analysisRetryDelay(error: unknown, now = Date.now()): number | null {
-  const transient = error instanceof TypeError || (error instanceof AnalysisRequestError && [429,502,503].includes(error.status));
+  const transient = error instanceof TypeError || (error instanceof DOMException && error.name === 'TimeoutError') || (error instanceof AnalysisRequestError && [429,502,503].includes(error.status));
   if (!transient) return null;
   const header = error instanceof AnalysisRequestError ? error.retryAfter : null;
   if (!header?.trim()) return 60000;
   const numeric = Number(header);
   const delay = Number.isFinite(numeric) ? numeric * 1000 : Date.parse(header) - now;
   return Number.isFinite(delay) ? Math.max(1000,Math.min(delay,2147483647)) : 60000;
+}
+
+// Add only positive jitter: never retry before the server’s Retry-After.
+export function jitterRetryDelay(delay: number, random = Math.random): number {
+  return Math.min(2147483647, delay + Math.floor(random() * 10000));
 }
 
 // Three automatic attempts per profile-answer version. An explicit later call
@@ -20,23 +25,27 @@ export function createAnalysisRetry(options: {
   onSuccess: () => Promise<unknown>;
   onError: (error: unknown, retrying: boolean) => void;
   onBusy: (busy: boolean) => void;
+  random?: () => number;
+  canRun?: () => boolean;
   schedule?: (callback: () => void, delay: number) => ReturnType<typeof setTimeout>;
   unschedule?: (timer: ReturnType<typeof setTimeout>) => void;
 }) {
   const schedule=options.schedule || setTimeout;
   const unschedule=options.unschedule || clearTimeout;
-  let key: string | null=null, generation=0, attempts=0;
+  let key: string | null=null, generation=0, attempts=0, waitingForConnection=false;
   let controller: AbortController | null=null;
   let timer: ReturnType<typeof setTimeout> | null=null;
   function setKey(next: string | null) {
     if (key===next) return;
-    key=next;generation++;attempts=0;
+    key=next;generation++;attempts=0;waitingForConnection=false;
     if(timer!==null) unschedule(timer);
     timer=null;controller?.abort();controller=null;
     options.onBusy(false);
   }
   async function run() {
     if(!key || controller || timer!==null) return;
+    if (options.canRun && !options.canRun()) { waitingForConnection=true; return; }
+    waitingForConnection=false;
     const current=generation;
     const request=new AbortController();controller=request;attempts++;
     options.onBusy(true);
@@ -49,10 +58,10 @@ export function createAnalysisRetry(options: {
       const delay=analysisRetryDelay(error);
       const retrying=delay!==null && attempts<3;
       options.onError(error,retrying);
-      if(retrying) timer=schedule(()=>{timer=null;void run();},delay);
+      if(retrying) timer=schedule(()=>{timer=null;void run();},jitterRetryDelay(delay, options.random));
     } finally {
       if(current===generation) {controller=null;options.onBusy(false);}
     }
   }
-  return {setKey,run};
+  return {setKey,run,resume: async () => { if(waitingForConnection) await run(); }};
 }

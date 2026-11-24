@@ -17,7 +17,7 @@
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 
 /* A consistent entry point: You contains onboarding and the saved profile. */
-.brand-name{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-weight:500;letter-spacing:-1px}
+.app-header .header-profile{margin-left:auto}
 .onboarding-card{max-width:650px;margin-top:28px}
 .onboarding-card .profile-form{margin-top:0}
 .join-preview .empty-state{max-width:650px;margin-top:28px}
@@ -32,4 +32,10 @@
  .join-preview .empty-state{padding:28px 20px}
  .join-preview .empty-state h2{font-size:22px}
  .workspace-main{padding-bottom:calc(105px + env(safe-area-inset-bottom))}
+}
+
+/* Centre each desktop section within the pane beside the navigation. */
+@media(min-width:761px){
+ .workspace-content{width:100%;max-width:900px;margin-inline:auto}
+ .workspace-content-narrow{max-width:650px}
 }

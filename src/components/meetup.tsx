@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, ArrowRight, ArrowUpRight, Check, ChevronRight, Coffee, HeartHandshake, LoaderCircle, MessageCircle, Send, Sparkles, UserRound, Users, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ArrowUpRight, Check, ChevronRight, Coffee, LoaderCircle, MessageCircle, Send, Sparkles, UserRound, Users, X } from 'lucide-react';
 import { useMeetup } from '@/lib/use-meetup';
 import { recommendations } from '@/lib/matching';
 import { roomProfiles } from '@/lib/room';
@@ -15,10 +15,8 @@ function Avatar({ person, large = false }: { person: Pick<Person, 'name'>; large
 }
 function ProfileForm({ initial, busy, demo, onSave, onCancel }: { initial?: Person | null; busy: boolean; demo: boolean; onSave: (p: ProfileInput) => Promise<boolean>; onCancel?: () => void }) {
   const [form, setForm] = useState<ProfileInput>(initial || empty);
-  const [consent, setConsent] = useState(!!initial);
-  const [localError, setLocalError] = useState('');
   function change(field: keyof ProfileInput, value: string) { setForm(old => ({ ...old, [field]: value })); }
-  async function submit(e: FormEvent) { e.preventDefault(); if (!consent) { setLocalError('Please confirm you understand who can see your profile.'); return; } setLocalError(''); await onSave(form); }
+  async function submit(e: FormEvent) { e.preventDefault(); await onSave(form); }
   function fillDemo() { const p = demoPeople()[0]; setForm({ name: p.name, need: p.need, offer: p.offer, recognition: p.recognition }); }
   return <form className="profile-form" onSubmit={submit}>
     {demo && !initial && <button type="button" className="demo-fill" onClick={fillDemo}><Sparkles size={17}/> Use Maya’s fictional rehearsal profile <ArrowRight size={16}/></button>}
@@ -32,10 +30,6 @@ function ProfileForm({ initial, busy, demo, onSave, onCancel }: { initial?: Pers
     <div className="field-counter">{form.offer.length}/500</div>
     <label htmlFor="recognition">How can people spot you? <span>Optional · clothing or another detail you’re happy to share.</span></label>
     <input id="recognition" maxLength={140} value={form.recognition} onChange={e => change('recognition', e.target.value)} placeholder="Green jumper, round glasses" />
-    <div className="privacy-note"><Users size={19}/><p><strong>Your profile is visible to this event’s participants.</strong> That includes your name, both answers and recognition description. Messages are private to the two people in a conversation. Your answers are processed by OpenAI to prepare recommendations; messages are not.</p></div>
-    {!initial && <label className="checkbox-label"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} required/><span>I understand and want to join.</span></label>}
-    <p className="small muted">No account to create. Return using this browser. Clearing browser storage or switching devices won’t automatically restore your profile or messages.</p>
-    {localError && <p role="alert" className="error-box">{localError}</p>}
     <div className="form-actions">{onCancel && <button className="button secondary" type="button" onClick={onCancel}>Cancel</button>}<button className="button primary" disabled={busy} type="submit">{busy ? <LoaderCircle className="spin" size={18}/> : null}{initial ? 'Save my changes' : 'Find my people'}<ArrowRight size={18}/></button></div>
   </form>;
 }
@@ -87,7 +81,7 @@ export default function Meetup({ slug, demo = false }: { slug: string; demo?: bo
   useEffect(() => { setSendError(''); setSent(false); }, [active]);
   const openProfile = (p: Person, match?: Match) => { setSelected(p); setSelectedMatch(match || null); };
   async function startChat() {
-    if (!selected) return;
+    if (!selected || !me) return;
     const id = await app.start(selected);
     if (id) { setSelected(null); setTab('inbox'); setDraft(selectedMatch?.question || ''); }
   }
@@ -102,9 +96,16 @@ export default function Meetup({ slug, demo = false }: { slug: string; demo?: bo
   function go(next: typeof tab) { setTab(next); app.setActive(null); setDraft(''); setSearch(''); app.setError(''); setSaved(false); window.scrollTo(0, 0); }
   async function save(p: ProfileInput) { const ok = await app.save(p); if (ok) { setEditing(false); setSaved(true); setTab('discover'); } return ok; }
 
+  const roomContent = <><div className="page-intro"><h1>Meet <em>the room.</em></h1></div><label className="search-label" htmlFor="search">Find a name or topic</label><input className="search-input" id="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search names, questions or offers…"/>
+          {search && <div className="room-search-actions"><button className="text-button" onClick={() => setSearch('')}>Clear search</button></div>}
+          {!me && app.roomLoading && people.length === 0 && <div className="empty-state" role="status"><LoaderCircle className="spin"/><p>Loading the room…</p></div>}
+          <div className="cards-grid room-grid">{roomPeople.map(person => <article className="person-card" key={person.id}><div className="person-heading"><Avatar person={person}/><div><h3>{person.name}</h3><p>{person.recognition || 'Here to connect'}</p></div></div><span className="section-kicker">I’D LIKE HELP WITH</span><p className="clamp-three">{person.need}</p><span className="section-kicker">I CAN HELP WITH</span><p className="clamp-three">{person.offer}</p><button className="card-action" onClick={() => openProfile(person)}>View profile <ArrowUpRight size={16}/></button></article>)}</div>
+          {roomPeople.length === 0 && !app.roomLoading && <div className="empty-state"><Users/>{!me && app.error ? <h3>Profiles are temporarily unavailable.</h3> : <><h3>{search ? 'No profiles found.' : 'You’re early. Welcome!'}</h3><p>{search ? 'Try a different name or topic.' : 'People’s profiles will appear here as they join.'}</p></>}</div>}
+        </>;
+
   return <div className="app-shell">
     {demo && <div className="demo-banner"><span><Sparkles size={14}/><strong>REHEARSAL</strong> · Fictional people. Messages stay in this browser.</span><Link href="/">About this app <ArrowUpRight size={13}/></Link></div>}
-    <header className="app-header"><Link className="brand" href="/"><span className="brand-mark">ai</span><span className="brand-name">pilled</span></Link><span className="event-badge">{demo ? 'DEMO ROOM' : 'IN THE ROOM'}</span>{me && <button className="header-profile" onClick={() => go('profile')} aria-label="My profile"><Avatar person={me}/></button>}</header>
+    <header className="app-header"><Link className="brand" href="/"><span className="brand-mark">ai</span><span className="brand-name">pilled</span></Link>{me && <button className="header-profile" onClick={() => go('profile')} aria-label="My profile"><Avatar person={me}/></button>}</header>
     {app.error && <div role="alert" className="error-box global-alert">{app.error}<button className="text-button" onClick={() => { app.setError(''); void app.refresh(); }}>Try again</button></div>}
     {app.loading ? <main className="loading-state" aria-live="polite"><LoaderCircle className="spin"/><h2>Finding your place in the room…</h2></main> : <>
       <div className="workspace-layout"><nav className="side-nav" aria-label="Main navigation"><div className="nav-event">YOUR MEETUP<span>AI pilled</span></div>
@@ -112,17 +113,18 @@ export default function Meetup({ slug, demo = false }: { slug: string; demo?: bo
         <button aria-current={tab === 'people' ? 'page' : undefined} onClick={() => go('people')}><Users size={20}/>The room<span className="nav-count">{people.filter(p => p.id !== me?.id).length}</span></button>
         <button aria-current={tab === 'inbox' ? 'page' : undefined} onClick={() => go('inbox')}><MessageCircle size={20}/>Inbox{unread > 0 && <span className="unread-badge">{unread}</span>}</button>
         <button aria-current={tab === 'profile' ? 'page' : undefined} onClick={() => go('profile')}><UserRound size={20}/>My profile</button>
-        <div className="nav-note"><HeartHandshake size={26}/><p>You don’t need to know everything to help someone.</p><span>{demo ? 'Fictional rehearsal room' : app.connected ? 'Updates automatically' : 'Reconnecting…'}</span></div>
+        <div className="nav-note"><span>{demo ? 'Fictional rehearsal room' : app.connected ? 'Updates automatically' : 'Reconnecting…'}</span></div>
       </nav>
-      <main className="workspace-main">
+      <main className="workspace-main"><div className={`workspace-content ${(!me && tab !== 'people') || tab === 'profile' ? 'workspace-content-narrow' : ''}`}>
         {!me ? <>
           <section hidden={tab !== 'profile'}>
             <div className="page-intro"><h1>A little bit <em>about you.</em></h1></div>
             <div className="join-card onboarding-card"><ProfileForm busy={app.busy} demo={demo} onSave={save}/></div>
           </section>
-          {tab !== 'profile' && <section className="join-preview">
-            <div className="page-intro"><h1>{tab === 'discover' ? 'For you.' : tab === 'people' ? 'Meet the room.' : 'Say hello.'}</h1></div>
-            <div className="empty-state"><UserRound size={30}/><h2>Start with a little about you.</h2><p>Add your answers to join the room, find useful connections and send messages.</p><button className="button primary" onClick={() => go('profile')}>Add your details <ArrowRight size={17}/></button></div>
+          {tab === 'people' && roomContent}
+          {(tab === 'discover' || tab === 'inbox') && <section className="join-preview">
+            <div className="page-intro"><h1>{tab === 'discover' ? 'For you.' : 'Say hello.'}</h1></div>
+            {tab === 'inbox' ? <div className="empty-state"><UserRound size={30}/><h2>Start with a little about you.</h2><p>Add your answers to join the room, find useful connections and send messages.</p><button className="button primary" onClick={() => go('profile')}>Add your details <ArrowRight size={17}/></button></div> : <div className="empty-state"><Sparkles size={30}/><p>Add your answers in You. Your recommendations will appear here once we’ve checked the connections.</p></div>}
           </section>}
         </> : <>
 
@@ -139,12 +141,8 @@ export default function Meetup({ slug, demo = false }: { slug: string; demo?: bo
             </section>;
           })}
         </>}
-        {tab === 'people' && <><div className="page-intro"><h1>Meet <em>the room.</em></h1></div><label className="search-label" htmlFor="search">Find a name or topic</label><input className="search-input" id="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search names, questions or offers…"/>
-          {search && <div className="room-search-actions"><button className="text-button" onClick={() => setSearch('')}>Clear search</button></div>}
-          <div className="cards-grid room-grid">{roomPeople.map(person => <article className="person-card" key={person.id}><div className="person-heading"><Avatar person={person}/><div><h3>{person.name}</h3><p>{person.recognition || 'Here to connect'}</p></div></div><span className="section-kicker">I’D LIKE HELP WITH</span><p className="clamp-three">{person.need}</p><span className="section-kicker">I CAN HELP WITH</span><p className="clamp-three">{person.offer}</p><button className="card-action" onClick={() => openProfile(person)}>View profile <ArrowUpRight size={16}/></button></article>)}</div>
-          {roomPeople.length === 0 && <div className="empty-state"><Users/><h3>{search ? 'No profiles found.' : 'You’re early. Welcome!'}</h3><p>{search ? 'Try a different name or topic.' : 'Other participants will appear here as they join.'}</p></div>}
-        </>}
-        {tab === 'profile' && <><div className="page-intro"><h1>A little bit <em>about you.</em></h1></div><section className="profile-detail own-profile"><div className="profile-title"><Avatar person={me} large/><div><h2>{me.name}</h2><p>{me.recognition || 'Add a recognition description to help people find you.'}</p></div></div>{editing ? <ProfileForm initial={me} busy={app.busy} demo={demo} onSave={save} onCancel={() => setEditing(false)}/> : <><span className="section-kicker">I’D LIKE HELP WITH</span><p className="answer-text">{me.need}</p><span className="section-kicker">I CAN HELP WITH</span><p className="answer-text">{me.offer}</p><button className="button primary" onClick={() => setEditing(true)}>Edit my profile <ArrowUpRight size={17}/></button><p className="small muted">Visible to participants in this event. Messages remain private. Access is tied to this browser’s saved session.</p></>}</section></>}
+        {tab === 'people' && roomContent}
+        {tab === 'profile' && <><div className="page-intro"><h1>A little bit <em>about you.</em></h1></div><section className="profile-detail own-profile"><div className="profile-title"><Avatar person={me} large/><div><h2>{me.name}</h2><p>{me.recognition || 'Add a recognition description to help people find you.'}</p></div></div>{editing ? <ProfileForm initial={me} busy={app.busy} demo={demo} onSave={save} onCancel={() => setEditing(false)}/> : <><span className="section-kicker">I’D LIKE HELP WITH</span><p className="answer-text">{me.need}</p><span className="section-kicker">I CAN HELP WITH</span><p className="answer-text">{me.offer}</p><button className="button primary" onClick={() => setEditing(true)}>Edit my profile <ArrowUpRight size={17}/></button><p className="small muted">Visible to people with this event’s link. Messages remain private. Access is tied to this browser’s saved session.</p></>}</section></>}
         {tab === 'inbox' && <><div className="page-intro inbox-intro"><h1>Say <em>hello.</em></h1></div>
           <div className={`inbox-layout ${active ? 'chat-open' : ''}`}><section className="conversation-list" aria-label="Conversations">{app.conversations.length ? [...app.conversations].sort((a, b) => (app.inbox.find(i => i.conversation_id === b.id)?.last_message_at || '').localeCompare(app.inbox.find(i => i.conversation_id === a.id)?.last_message_at || '')).map(c => {
             const person = people.find(p => p.id === (c.participant_a === me.id ? c.participant_b : c.participant_a));
@@ -159,9 +157,9 @@ export default function Meetup({ slug, demo = false }: { slug: string; demo?: bo
           </> : <div className="empty-state chat-placeholder"><MessageCircle size={36}/><h3>A little message.<br/>A useful conversation.</h3><p>Choose a conversation or say hello to someone new.</p></div>}</section></div>
         </>}
         </>}
-      </main></div>
+      </div></main></div>
       <nav className="bottom-nav" aria-label="Mobile navigation">{([{ id: 'discover', label: 'For you', icon: Sparkles }, { id: 'people', label: 'The room', icon: Users }, { id: 'inbox', label: 'Inbox', icon: MessageCircle }, { id: 'profile', label: 'You', icon: UserRound }] as const).map(item => <button key={item.id} aria-current={tab === item.id ? 'page' : undefined} onClick={() => go(item.id)}><item.icon size={21}/><span>{item.label}</span>{item.id === 'inbox' && unread > 0 && <span className="bottom-unread">{unread}</span>}</button>)}</nav>
     </>}
-    <dialog ref={modalRef} className="profile-modal" onCancel={() => setSelected(null)} onClick={e => { if (e.target === e.currentTarget) setSelected(null); }} onClose={() => setSelected(null)} aria-labelledby="profile-modal-title">{selected && <><button className="modal-close icon-button" onClick={() => setSelected(null)} aria-label="Close profile"><X size={22}/></button><div className="profile-title"><Avatar person={selected} large/><div><span className="eyebrow">{demo ? 'FICTIONAL PARTICIPANT' : 'IN YOUR ROOM'}</span><h2 id="profile-modal-title">Meet {selected.name}.</h2></div></div>{selected.recognition && <p className="recognition"><Coffee size={17}/>{selected.recognition}</p>}<span className="section-kicker">I’D LIKE HELP WITH</span><p className="answer-text">{selected.need}</p><span className="section-kicker">I CAN HELP WITH</span><p className="answer-text">{selected.offer}</p>{selectedMatch && <div className="opening-question"><span className="section-kicker">A WAY TO BREAK THE ICE</span><p>{selectedMatch.question}</p></div>}<button className="button primary full-width" onClick={() => void startChat()}><MessageCircle size={18}/>Message {selected.name}<ArrowUpRight size={18}/></button><p className="small muted centered">No introduction required. A friendly message is enough.</p></>}</dialog>
+    <dialog ref={modalRef} className="profile-modal" onCancel={() => setSelected(null)} onClick={e => { if (e.target === e.currentTarget) setSelected(null); }} onClose={() => setSelected(null)} aria-labelledby="profile-modal-title">{selected && <><button className="modal-close icon-button" onClick={() => setSelected(null)} aria-label="Close profile"><X size={22}/></button><div className="profile-title"><Avatar person={selected} large/><div><span className="eyebrow">{demo ? 'FICTIONAL PARTICIPANT' : 'IN YOUR ROOM'}</span><h2 id="profile-modal-title">Meet {selected.name}.</h2></div></div>{selected.recognition && <p className="recognition"><Coffee size={17}/>{selected.recognition}</p>}<span className="section-kicker">I’D LIKE HELP WITH</span><p className="answer-text">{selected.need}</p><span className="section-kicker">I CAN HELP WITH</span><p className="answer-text">{selected.offer}</p>{selectedMatch && <div className="opening-question"><span className="section-kicker">A WAY TO BREAK THE ICE</span><p>{selectedMatch.question}</p></div>}{me ? <><button className="button primary full-width" onClick={() => void startChat()}><MessageCircle size={18}/>Message {selected.name}<ArrowUpRight size={18}/></button><p className="small muted centered">No introduction required. A friendly message is enough.</p></> : <button className="button primary full-width" onClick={() => { setSelected(null); go('profile'); }}>Add your details to say hello <ArrowRight size={18}/></button>}</>}</dialog>
   </div>;
 }

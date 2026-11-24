@@ -1,7 +1,8 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase, interpretProfile } from './supabase';
-import { createAnalysisRetry } from './analysis-retry';
+import { AnalysisRequestError, analysisRetryDelay, createAnalysisRetry, jitterRetryDelay } from './analysis-retry';
+import { withRequestTimeout } from './request-timeout';
 import { demoPeople, demoProfile } from './demo';
 import { profileSchema, messageSchema } from './validation';
 import type { Conversation, Match, Message, Person, ProfileInput } from './types';
@@ -34,15 +35,18 @@ export function useMeetup(slug: string, demo: boolean) {
   const [reviewError, setReviewError] = useState('');
   const [active, setActive] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [roomLoading, setRoomLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [analysing, setAnalysing] = useState(false);
   const [error, setError] = useState('');
+  const [refreshError, setRefreshError] = useState('');
   const [analysisError, setAnalysisError] = useState('');
   const [recommendationError, setRecommendationError] = useState('');
   const [connected, setConnected] = useState(false);
   const demoRef = useRef<DemoState>(blank);
   const mounted = useRef(true);
-  const refreshing = useRef(false);
+  const refreshing = useRef<symbol | null>(null);
+  const roomScope = useRef(slug); roomScope.current = slug;
   const activeRef = useRef(active); activeRef.current = active;
 
   const syncDemo = useCallback((state: DemoState) => {
@@ -63,43 +67,67 @@ export function useMeetup(slug: string, demo: boolean) {
     if (reviewInFlight.current || Date.now() < reviewRetryAt.current) return;
     reviewInFlight.current = true;
     try {
-      const response = await fetch('/api/review', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Some connection checks could not finish. We’ll retry shortly.');
+      await withRequestTimeout(async signal => {
+        const response = await fetch('/api/review', { method: 'POST', signal, headers: { Authorization: `Bearer ${token}` } });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new AnalysisRequestError(result.error || 'Some connection checks could not finish. We’ll retry shortly.', response.status, response.headers.get('Retry-After'));
+      }, 75000);
       setReviewError('');
-    } catch (e) { setReviewError(errorText(e)); reviewRetryAt.current = Date.now()+60000; }
+    } catch (e) { setReviewError(errorText(e)); reviewRetryAt.current = Date.now()+jitterRetryDelay(analysisRetryDelay(e) ?? 60000); }
     finally { reviewInFlight.current = false; }
   }, []);
 
   const refresh = useCallback(async () => {
     if (refreshing.current || demo) return;
-    refreshing.current = true;
+    const requestKey = Symbol(slug); refreshing.current = requestKey;
+    const current = () => mounted.current && roomScope.current === slug && refreshing.current === requestKey;
+    let guest = false;
+    const loadGuestRoom = async () => {
+      guest = true;
+      if (!current()) return;
+      setLoading(false); setRoomLoading(true);
+      setMe(null); setMatches({ receive: [], give: [] }); setConversations([]); setInbox([]); setMessages([]); setReviewPending(0);
+      const result = await withRequestTimeout(async signal => {
+        const response = await fetch(`/api/room?slug=${encodeURIComponent(slug)}`, { signal, cache: 'no-store' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not load the room. Please try again.');
+        return data as { people: Person[] };
+      });
+      if (current()) { setPeople(result.people); setRefreshError(''); setConnected(true); }
+    };
     try {
       const db = supabase();
-      const { data: session } = await db.auth.getSession();
-      if (!session.session) { setMe(null); setLoading(false); return; }
-      const [profiles, chats, previews, event] = await Promise.all([
-        db.from('participants').select('id,event_id,name,need,offer,recognition,answer_version,updated_at,analysis_version:interpretation->version,analysis_pipeline:interpretation->pipeline').order('name').limit(200),
-        db.from('conversations').select('*'), db.rpc('get_inbox'), db.from('events').select('slug')
-      ]);
+      const { data: session } = await withRequestTimeout(() => db.auth.getSession());
+      if (!session.session) { await loadGuestRoom(); return; }
+      const [profiles, chats, previews, event] = await withRequestTimeout(signal => Promise.all([
+        db.from('participants').select('id,event_id,name,need,offer,recognition,answer_version,updated_at,analysis_version:interpretation->version,analysis_pipeline:interpretation->pipeline').order('name').limit(200).abortSignal(signal),
+        db.from('conversations').select('*').abortSignal(signal), db.rpc('get_inbox').abortSignal(signal), db.from('events').select('slug').abortSignal(signal)
+      ]));
       if (profiles.error) throw profiles.error;
       if (chats.error) throw chats.error;
       if (previews.error) throw previews.error;
       if (event.error) throw event.error;
-      if (event.data.length && event.data[0].slug !== slug) throw new Error('This browser has joined a different event. Use your original event link or a separate browser session.');
-      if (!mounted.current) return;
+      if (event.data.length && event.data[0].slug !== slug) { await loadGuestRoom(); return; }
+      if (!current()) return;
       const mapped = profiles.data.map(p => ({ ...p, interpretation: p.analysis_version ? { version: p.analysis_version, pipeline: p.analysis_pipeline, needs: [], offers: [], model: '' } : null })) as Person[];
+      const ownProfile = mapped.find(p => p.id === session.session!.user.id);
+      if (!ownProfile) { await loadGuestRoom(); return; }
       setPeople(mapped);
-      setMe(mapped.find(p => p.id === session.session!.user.id) || null);
+      setMe(ownProfile);
       try {
-        const response = await fetch('/api/recommendations', { headers: { Authorization: `Bearer ${session.session.access_token}` }, cache: 'no-store' });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Could not load recommendations. Please try again.');
+        const result = await withRequestTimeout(async signal => {
+          const response = await fetch('/api/recommendations', { signal, headers: { Authorization: `Bearer ${session.session.access_token}` }, cache: 'no-store' });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || 'Could not load recommendations. Please try again.');
+          return result;
+        });
+        if (!current()) return;
         setMatches({ receive: result.receive, give: result.give }); setRecommendationError('');
         setReviewPending(result.pending || 0);
         if (result.pending > 0) void runReview(session.session.access_token);
         else setReviewError('');
       } catch (e) {
+        if (!current()) return;
         setMatches({ receive: [], give: [] });
         setRecommendationError(errorText(e));
       }
@@ -107,23 +135,36 @@ export function useMeetup(slug: string, demo: boolean) {
       setInbox(previews.data || []);
       const requestedConversation = activeRef.current;
       if (requestedConversation) {
-        const result = await db.from('messages').select('*').eq('conversation_id', requestedConversation).order('created_at', { ascending: false }).limit(100);
+        const result = await withRequestTimeout(signal => db.from('messages').select('*').eq('conversation_id', requestedConversation).order('created_at', { ascending: false }).limit(100).abortSignal(signal));
         if (result.error) throw result.error;
-        if (requestedConversation === activeRef.current) setMessages((result.data || []).reverse());
+        if (current() && requestedConversation === activeRef.current) setMessages((result.data || []).reverse());
       }
-      setConnected(true);
-    } catch (e) { setError(errorText(e)); setConnected(false); }
-    finally { refreshing.current = false; setLoading(false); }
+      if (current()) { setConnected(true); setRefreshError(''); }
+    } catch (e) { if (current()) { if (guest) setPeople([]); setRefreshError(errorText(e)); setConnected(false); } }
+    finally { if (current()) { setLoading(false); setRoomLoading(false); } if (refreshing.current === requestKey) refreshing.current = null; }
   }, [demo, slug, runReview]);
 
   useEffect(() => {
     mounted.current = true;
+    setPeople([]); setMe(null); setConversations([]); setInbox([]); setMessages([]); setMatches({ receive: [], give: [] });
+    setReviewPending(0); setRefreshError(''); setLoading(true);
     if (demo) { syncDemo(loadDemo()); setLoading(false); return; }
     void refresh();
-    const timer = setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 5000);
+    // Spread event-wide polling over time while staying inside the worker demand TTL.
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = () => {
+      timer = setTimeout(() => {
+        if (document.visibilityState === 'visible' && navigator.onLine) void refresh();
+        poll();
+      }, 5000 + Math.floor(Math.random() * 2000));
+    };
+    poll();
     const focus = () => void refresh();
+    const visible = () => { if (document.visibilityState === 'visible') void refresh(); };
     window.addEventListener('focus', focus);
-    return () => { mounted.current = false; clearInterval(timer); window.removeEventListener('focus', focus); };
+    window.addEventListener('online', focus);
+    document.addEventListener('visibilitychange', visible);
+    return () => { mounted.current = false; refreshing.current = null; clearTimeout(timer); window.removeEventListener('focus', focus); window.removeEventListener('online', focus); document.removeEventListener('visibilitychange', visible); };
   }, [demo, refresh, syncDemo]);
 
   useEffect(() => {
@@ -148,13 +189,16 @@ export function useMeetup(slug: string, demo: boolean) {
   const analysisRunner = useRef<ReturnType<typeof createAnalysisRetry> | null>(null);
   analysisRunner.current ??= createAnalysisRetry({
     perform: signal => interpretProfile(signal),
+    canRun: () => navigator.onLine,
     onSuccess: () => latestRefresh.current(),
     onError: (e,retrying) => setAnalysisError(errorText(e)+(retrying ? ' We’ll retry automatically shortly.' : '')),
     onBusy: value => {setAnalysing(value); if(value) setAnalysisError('');}
   });
   useEffect(() => {
     analysisRunner.current!.setKey(analysisKey);
-    return () => analysisRunner.current!.setKey(null);
+    const resume = () => { void analysisRunner.current!.resume(); };
+    window.addEventListener('online', resume);
+    return () => { analysisRunner.current!.setKey(null); window.removeEventListener('online', resume); };
   },[analysisKey]);
   const analyse = useCallback(async () => {
     if (demo) return;
@@ -228,5 +272,5 @@ export function useMeetup(slug: string, demo: boolean) {
     syncDemo({ ...demoRef.current, messages: [...demoRef.current.messages, { id: crypto.randomUUID(), client_id: crypto.randomUUID(), conversation_id: convo.id,
       sender_id: other, body: 'This is a simulated rehearsal reply: happy to chat — I’m near the coffee table!', created_at: new Date().toISOString() }] });
   }
-  return { me, people, matches, conversations, inbox, messages, active, setActive, loading, busy, analysing, error, setError, analysisError, recommendationError, reviewPending, reviewError, connected, save, start, send, markRead, analyse, refresh, simulateReply };
+  return { me, people, matches, conversations, inbox, messages, active, setActive, loading, roomLoading, busy, analysing, error: error || refreshError, setError, analysisError, recommendationError, reviewPending, reviewError, connected, save, start, send, markRead, analyse, refresh, simulateReply };
 }
