@@ -1,3 +1,4 @@
+import { AnalysisRequestError } from './analysis-retry';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 let browserClient: SupabaseClient | undefined;
 export function supabase() {
@@ -7,11 +8,11 @@ export function supabase() {
   browserClient ??= createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
   return browserClient;
 }
-export async function interpretProfile() {
+export async function interpretProfile(signal?: AbortSignal) {
   const { data } = await supabase().auth.getSession();
   if (!data.session) throw new Error('Your session has expired. Please reopen the event link.');
-  const response = await fetch('/api/interpret', { method: 'POST', headers: { Authorization: `Bearer ${data.session.access_token}` } });
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.error || 'Recommendations could not be prepared. Please try again.');
+  const response = await fetch('/api/interpret', { method: 'POST', signal, headers: { Authorization: `Bearer ${data.session.access_token}` } });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new AnalysisRequestError(result.error || 'Recommendations could not be prepared. Please try again.', response.status, response.headers.get('Retry-After'));
   return result;
 }

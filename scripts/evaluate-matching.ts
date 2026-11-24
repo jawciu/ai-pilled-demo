@@ -20,12 +20,21 @@ const checks:Check[]=[...original.checks,...held.checks,
   {need:'held-writing',offer:'french',expected:true,reason:'Discovered dropped French translation offer must be retained'},
   ...fresh.checks
 ];
-const directory=`${root}/.tmp/scenarios`;
-await mkdir(directory,{recursive:true});
+const event=process.env.EVALUATION_EVENT || original.event;
+if (!['ai-pilled-test-2026','ai-pilled-test-codex-2026-11-24'].includes(event)) throw new Error('Refusing an unapproved evaluation event');
+const directory=event===original.event ? `${root}/.tmp/scenarios` : `${root}/.tmp/scenarios/${event}`;
+const startedAt=Date.now();
+const firstUsefulMs:Record<string,number>={};
+const joinedAt:Record<string,number>={};
+const firstUsefulFromJoinMs:Record<string,number>={};
+async function pool<T>(items:T[],run:(item:T)=>Promise<void>,limit=4) {
+ let next=0; await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{while(next<items.length) await run(items[next++]);}));
+}
+await mkdir(directory,{recursive:true,mode:0o700});
 const clients=new Map<string,{db:SupabaseClient;uid:string;token:string}>();
 const failures:{id:string;stage:string;message:string}[]=[];
 const extraction:Record<string,any>={};
-let cursor=0;
+
 async function prepare(profile:Fixture) {
   const path=`${directory}/${profile.id}-session.json`;
   const db=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
@@ -35,8 +44,9 @@ async function prepare(profile:Fixture) {
     const session=auth.data.session;
     await writeFile(path,JSON.stringify({access_token:session.access_token,refresh_token:session.refresh_token}));
     clients.set(profile.id,{db,uid:session.user.id,token:session.access_token});
-    const joined=await db.rpc('join_event',{p_slug:original.event,p_name:profile.name,p_need:profile.need,p_offer:profile.offer,p_recognition:'FICTIONAL matching evaluation, not an attendee'});
+    const joined=await db.rpc('join_event',{p_slug:event,p_name:profile.name,p_need:profile.need,p_offer:profile.offer,p_recognition:'FICTIONAL matching evaluation, not an attendee'});
     if(joined.error) throw joined.error;
+    joinedAt[profile.id]=Date.now();
     if(joined.data.need!==profile.need || joined.data.offer!==profile.offer) throw new Error('Fixture differs from stored answers; refusing silent rewrite');
     const response=await fetch(`${base}/api/interpret`,{method:'POST',headers:{Authorization:`Bearer ${session.access_token}`},signal:AbortSignal.timeout(65000)});
     const result=await response.json();
@@ -50,7 +60,7 @@ async function prepare(profile:Fixture) {
     console.log('EXTRACTED',profile.id,result.cached?'cached':'new');
   } catch(error) { const message=error && typeof error==='object' && 'message' in error?String(error.message):String(error); failures.push({id:profile.id,stage:'extraction',message});console.log('ERROR',profile.id,message); }
 }
-await Promise.all([0,1].map(async()=>{while(cursor<profiles.length) await prepare(profiles[cursor++]);}));
+await pool(profiles,prepare,2);
 async function apiFetch(id:string,path:string,method='GET') {
   const client=clients.get(id)!;
   const state=await client.db.auth.getSession();
@@ -72,30 +82,47 @@ async function apiFetch(id:string,path:string,method='GET') {
   return response;
 }
 let freshBatches=0;
-for(let round=0;round<15;round++) {
+const retryAt=new Map<string,number>();
+const transientErrors:{id:string;status:number;code?:string}[]=[];
+let remaining=0;
+for(let round=0;round<80;round++) {
   let pending=0;
-  for(const [id,client] of clients) {
-    if(!extraction[id]) continue;
+  await pool([...clients.keys()].filter(id=>extraction[id]),async id=>{
     const response=await apiFetch(id,'/api/recommendations');
     const result=await response.json();
-    if(!response.ok) {failures.push({id,stage:'recommendations',message:result.error});continue;}
+    if(!response.ok) {failures.push({id,stage:'recommendations',message:result.error});return;}
+    if((result.receive.length || result.give.length) && firstUsefulMs[id]===undefined) {
+      firstUsefulMs[id]=Date.now()-startedAt;
+      firstUsefulFromJoinMs[id]=Date.now()-(joinedAt[id]||startedAt);
+      console.log('FIRST_USEFUL_MS',id,firstUsefulMs[id]);
+    }
     pending+=result.pending||0;
-    if(result.pending>0) {
+    if(result.pending>0 && Date.now()>=(retryAt.get(id)||0)) {
       const checked=await apiFetch(id,'/api/review','POST');
       const output=await checked.json();
-      if(!checked.ok) failures.push({id,stage:'review',message:`${checked.status}: ${output.error}`});
+      if(!checked.ok) {
+        if(checked.status===429 || checked.status===502) {
+          const seconds=Math.max(1,Math.min(120,Number(checked.headers.get('Retry-After'))||60));
+          retryAt.set(id,Date.now()+seconds*1000);
+          transientErrors.push({id,status:checked.status,code:output.code});
+        } else failures.push({id,stage:'review',message:`${checked.status}: ${output.error}`});
+      }
       if(output.reviewed>0) freshBatches++;
-      console.log('REVIEW',round,id,output.reviewed??output.error);
+      console.log('REVIEW',round,id,output.reviewed??output.code??output.error);
     }
-  }
+  });
+  remaining=pending;
   if(pending===0) break;
-  if(round===14) failures.push({id:'suite',stage:'review',message:'Pending reviews remain after bounded evaluation rounds'});
+  if(failures.some(f=>f.stage==='review' || f.stage==='recommendations')) break;
+  // Let browser-like polling and provider backoff advance without a request storm.
+  await new Promise(resolve=>setTimeout(resolve,5000));
 }
+if(remaining) failures.push({id:'suite',stage:'review',message:'Pending reviews remain after bounded evaluation'});
 const recommendations:Record<string,any>={};
-for(const [id,client] of clients) {
+await pool([...clients.keys()],async id=>{
   const response=await apiFetch(id,'/api/recommendations');
   if(response.ok) recommendations[id]=await response.json();
-}
+});
 const results=checks.map((check,index)=>{
   const helper=clients.get(check.offer),requester=clients.get(check.need),list=recommendations[check.need];
   const group=index<original.checks.length?'original':index<original.checks.length+held.checks.length?'held-out':index<original.checks.length+held.checks.length+2?'discovered':'fresh-verification';
@@ -110,8 +137,8 @@ const explicitFrench=extraction.french?.offers.some((t:any)=>t.evidence.includes
 const openers=Object.values(recommendations).flatMap((r:any)=>[...r.receive,...r.give].map((m:any)=>m.question));
 const acceptedQuestionLimits=openers.every((q:string)=>q.length<=205 && /[?？]/u.test(q));
 const summarize=(group:string)=>{const selected=results.filter(r=>r.group===group);return{total:selected.length,passed:selected.filter(r=>r.outcome==='PASS').length,missed:selected.filter(r=>r.outcome==='MISSED_MATCH').length,falsePositives:selected.filter(r=>r.outcome==='FALSE_POSITIVE').length,unverified:selected.filter(r=>r.outcome==='UNVERIFIED').length};};
-const summary={profiles:profiles.length,extracted:Object.keys(extraction).length,original:summarize('original'),'held-out':summarize('held-out'),discovered:summarize('discovered'),freshVerification:summarize('fresh-verification'),explicitFrenchOffersRetained:!!explicitFrench,acceptedQuestionLimits,freshBatches};
-await writeFile(`${directory}/repaired-results.json`,JSON.stringify({timestamp:new Date().toISOString(),base,event:original.event,summary,failures,checks:results,extraction,recommendations},null,2));
+const summary={profiles:profiles.length,extracted:Object.keys(extraction).length,original:summarize('original'),'held-out':summarize('held-out'),discovered:summarize('discovered'),freshVerification:summarize('fresh-verification'),explicitFrenchOffersRetained:!!explicitFrench,acceptedQuestionLimits,freshBatches,elapsedMs:Date.now()-startedAt,firstUsefulMs,firstUsefulFromJoinMs,reviewConcurrency:4,transientErrors};
+await writeFile(`${directory}/repaired-results.json`,JSON.stringify({timestamp:new Date().toISOString(),base,event,summary,failures,checks:results,extraction,recommendations},null,2));
 console.log('SUMMARY',JSON.stringify(summary));
 for(const result of results) console.log(result.outcome,result.group,`${result.need} <- ${result.offer}`,'rank' in result?result.rank:'');
 if(results.some(r=>r.outcome!=='PASS')||!explicitFrench||!acceptedQuestionLimits||failures.length) process.exitCode=1;

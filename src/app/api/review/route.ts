@@ -1,9 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { reviewAnswers, reviewFailureCode } from '@/lib/ai-matching';
-import { reviewIsCurrent } from '@/lib/reviewed-matching';
+import { reviewFailureCode } from '@/lib/ai-matching';
+import { partitionReviewJobs, prepareReviewBatch } from '@/lib/review-batch';
 import type { MatchReview, Person } from '@/lib/types';
-import { compatibleTaskScope, staleReadabilityRejection } from '@/lib/task-scope';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 export async function POST(request: Request) {
@@ -17,20 +16,7 @@ export async function POST(request: Request) {
   if (authError || !user) return NextResponse.json({ error: 'Sign in first.' }, { status: 401 });
   if (!secret || !process.env.OPENAI_API_KEY) return NextResponse.json({ error: 'Connection checks are not configured. Your profile and inbox still work.' }, { status: 503 });
   const admin = createClient(url,secret,{ auth: { persistSession: false } });
-  const [existing, profiles] = await Promise.all([db.rpc('current_match_reviews'),db.from('participants').select('*').limit(200)]);
-  if (existing.error || profiles.error) return NextResponse.json({ error: 'Connection checks are temporarily unavailable.' }, { status: 503 });
-  const byId = new Map((profiles.data as Person[]).map(p => [p.id,p]));
-  for (const old of existing.data as MatchReview[]) {
-    const requester=byId.get(old.requester_id),helper=byId.get(old.helper_id);
-    if (requester && helper && reviewIsCurrent(old,requester,helper) && staleReadabilityRejection(old,requester,helper)) {
-      const result=await admin.from('match_reviews').update({status:'failed',lease_until:new Date(0).toISOString(),decision:null})
-        .eq('requester_id',old.requester_id).eq('helper_id',old.helper_id)
-        .eq('requester_version',old.requester_version).eq('helper_version',old.helper_version)
-        .eq('revision',old.revision).eq('lease_id',old.lease_id).eq('status','ready');
-      if (result.error) return NextResponse.json({error:'Could not refresh an outdated connection check.'},{status:503});
-    }
-  }
-  const { data: claimed, error: claimError } = await db.rpc('claim_match_reviews',{ p_limit: 8 });
+  const { data: claimed, error: claimError } = await db.rpc('claim_match_reviews_v3',{ p_limit: 8 });
   if (claimError) return NextResponse.json({ error: 'Connection checks need the matching database update. Your inbox still works.' }, { status: 503 });
   const jobs = claimed as MatchReview[];
   if (!jobs.length) return NextResponse.json({ reviewed: 0 });
@@ -39,23 +25,26 @@ export async function POST(request: Request) {
     const { data, error } = await db.from('participants').select('*').in('id',ids);
     if (error) throw new Error('Could not read matching profiles');
     const people = new Map((data as Person[]).map(p => [p.id,p]));
-    const valid = jobs.filter(job => {
-      const a = people.get(job.requester_id), b = people.get(job.helper_id);
-      return a && b && reviewIsCurrent(job,a,b);
-    });
-    const candidates = valid.filter(job => compatibleTaskScope(people.get(job.requester_id)!,people.get(job.helper_id)!));
-    const decisions = candidates.length ? await reviewAnswers(candidates.map(job => ({ need: people.get(job.requester_id)!.need, offer: people.get(job.helper_id)!.offer }))) : [];
-    const byLease = new Map(candidates.map((job,index) => [job.lease_id,decisions[index]]));
-    for (let i = 0; i < valid.length; i++) {
-      const job = valid[i];
-      const { index: _index, ...decision } = byLease.get(job.lease_id) || { index: 0, level: 'none', need_evidence: '', offer_evidence: '', topic: '', opening: '' };
-      const { error: saveError } = await admin.from('match_reviews').update({ status: 'ready', decision: { ...decision, scope_policy: 2 }, updated_at: new Date().toISOString() })
+    // An edit between claiming and reading must not occupy an event worker for
+    // the remaining 90 seconds. Release only this exact obsolete lease/version.
+    const {valid,obsolete} = partitionReviewJobs(jobs,people);
+    for (const job of obsolete) {
+      const {error:releaseError} = await admin.from('match_reviews').update({
+        status:'failed',decision:null,lease_until:new Date(0).toISOString(),updated_at:new Date().toISOString()
+      }).eq('requester_id',job.requester_id).eq('helper_id',job.helper_id)
+        .eq('requester_version',job.requester_version).eq('helper_version',job.helper_version)
+        .eq('revision',job.revision).eq('lease_id',job.lease_id).eq('status','processing');
+      if (releaseError) throw new Error('Could not release obsolete connection check');
+    }
+    const prepared = await prepareReviewBatch(valid,people);
+    for (const { job, decision } of prepared) {
+      const { error: saveError } = await admin.from('match_reviews').update({ status: 'ready', decision: { ...decision, scope_policy: 3 }, updated_at: new Date().toISOString() })
         .eq('requester_id',job.requester_id).eq('helper_id',job.helper_id)
         .eq('requester_version',job.requester_version).eq('helper_version',job.helper_version)
         .eq('revision',job.revision).eq('lease_id',job.lease_id).eq('status','processing');
       if (saveError) throw new Error('Could not cache connection check');
     }
-    return NextResponse.json({ reviewed: valid.length });
+    return NextResponse.json({ reviewed: prepared.length });
   } catch (error) {
     const code = reviewFailureCode(error);
     console.error('Connection review failed',{ code });

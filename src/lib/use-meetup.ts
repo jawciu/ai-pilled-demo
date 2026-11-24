@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase, interpretProfile } from './supabase';
+import { createAnalysisRetry } from './analysis-retry';
 import { demoPeople, demoProfile } from './demo';
 import { profileSchema, messageSchema } from './validation';
 import type { Conversation, Match, Message, Person, ProfileInput } from './types';
@@ -141,13 +142,24 @@ export function useMeetup(slug: string, demo: boolean) {
     if (active) void refresh();
   }, [active, demo, refresh, syncDemo]);
 
+  const analysisKey = !demo && me && !(me.interpretation?.version === me.answer_version && me.interpretation.pipeline === 2)
+    ? `${slug}:${me.event_id}:${me.id}:${me.answer_version}` : null;
+  const latestRefresh = useRef(refresh); latestRefresh.current=refresh;
+  const analysisRunner = useRef<ReturnType<typeof createAnalysisRetry> | null>(null);
+  analysisRunner.current ??= createAnalysisRetry({
+    perform: signal => interpretProfile(signal),
+    onSuccess: () => latestRefresh.current(),
+    onError: (e,retrying) => setAnalysisError(errorText(e)+(retrying ? ' We’ll retry automatically shortly.' : '')),
+    onBusy: value => {setAnalysing(value); if(value) setAnalysisError('');}
+  });
+  useEffect(() => {
+    analysisRunner.current!.setKey(analysisKey);
+    return () => analysisRunner.current!.setKey(null);
+  },[analysisKey]);
   const analyse = useCallback(async () => {
     if (demo) return;
-    setAnalysing(true); setAnalysisError('');
-    try { await interpretProfile(); await refresh(); }
-    catch (e) { setAnalysisError(errorText(e)); }
-    finally { setAnalysing(false); }
-  }, [demo, refresh]);
+    await analysisRunner.current!.run();
+  }, [demo]);
 
   async function save(input: ProfileInput) {
     setError(''); setBusy(true);

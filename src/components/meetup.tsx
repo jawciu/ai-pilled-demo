@@ -46,7 +46,7 @@ function MatchCard({ match, onOpen }: { match: Match; onOpen: () => void }) {
 }
 export default function Meetup({ slug, demo = false }: { slug: string; demo?: boolean }) {
   const app = useMeetup(slug, demo);
-  const [tab, setTab] = useState<'discover' | 'people' | 'inbox' | 'profile'>('discover');
+  const [tab, setTab] = useState<'discover' | 'people' | 'inbox' | 'profile'>('profile');
   const [editing, setEditing] = useState(false);
   const [selected, setSelected] = useState<Person | null>(null);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
@@ -64,7 +64,6 @@ export default function Meetup({ slug, demo = false }: { slug: string; demo?: bo
   const attempted = useRef('');
   const { me, people, active } = app;
   const roomPeople = useMemo(() => roomProfiles(people, me?.id || '', search), [people, me?.id, search]);
-  const roomTotal = people.filter(person => person.id !== me?.id).length;
   const receive = useMemo(() => demo && me ? recommendations(me, people, 'receive') : app.matches.receive, [demo, me, people, app.matches.receive]);
   const give = useMemo(() => demo && me ? recommendations(me, people, 'give') : app.matches.give, [demo, me, people, app.matches.give]);
   const unread = app.inbox.reduce((n, c) => n + Number(c.unread), 0);
@@ -105,42 +104,48 @@ export default function Meetup({ slug, demo = false }: { slug: string; demo?: bo
 
   return <div className="app-shell">
     {demo && <div className="demo-banner"><span><Sparkles size={14}/><strong>REHEARSAL</strong> · Fictional people. Messages stay in this browser.</span><Link href="/">About this app <ArrowUpRight size={13}/></Link></div>}
-    <header className="app-header"><Link className="brand" href="/"><span className="brand-mark">ai</span>AI pilled<span className="brand-dot"/></Link><span className="event-badge"><span className="live-dot"/>{demo ? 'DEMO ROOM' : 'IN THE ROOM'}</span>{me && <button className="header-profile" onClick={() => go('profile')} aria-label="My profile"><Avatar person={me}/></button>}</header>
+    <header className="app-header"><Link className="brand" href="/"><span className="brand-mark">ai</span><span className="brand-name">pilled</span></Link><span className="event-badge">{demo ? 'DEMO ROOM' : 'IN THE ROOM'}</span>{me && <button className="header-profile" onClick={() => go('profile')} aria-label="My profile"><Avatar person={me}/></button>}</header>
     {app.error && <div role="alert" className="error-box global-alert">{app.error}<button className="text-button" onClick={() => { app.setError(''); void app.refresh(); }}>Try again</button></div>}
-    {app.loading ? <main className="loading-state" aria-live="polite"><LoaderCircle className="spin"/><h2>Finding your place in the room…</h2></main> : !me ? <main className="join-layout">
-      <aside className="join-intro"><span className="eyebrow">A LITTLE HELP GOES A LONG WAY</span><h1>You belong<br /><em>in this room.</em></h1><p>Big question or small stuck moment?<br />There’s probably someone here who gets it.</p><div className="join-steps"><div><span>1</span>Share what you need and what you can offer.</div><div><span>2</span>Find people with a useful connection.</div><div><span>3</span>Send a message. Say hello.</div></div><div className="join-aside-note"><Coffee size={22}/><p>No perfect matches. No exclusive pairs.<br /><strong>Just a starting point for a good conversation.</strong></p></div></aside>
-      <section className="join-card"><span className="eyebrow">{demo ? 'TRY IT WITH FICTIONAL PEOPLE' : 'WELCOME TO AI PILLED'}</span><h2>Let’s start with you.</h2><p className="muted">Two short answers. A room of possibilities.</p><ProfileForm busy={app.busy} demo={demo} onSave={save}/></section>
-    </main> : <>
+    {app.loading ? <main className="loading-state" aria-live="polite"><LoaderCircle className="spin"/><h2>Finding your place in the room…</h2></main> : <>
       <div className="workspace-layout"><nav className="side-nav" aria-label="Main navigation"><div className="nav-event">YOUR MEETUP<span>AI pilled</span></div>
         <button aria-current={tab === 'discover' ? 'page' : undefined} onClick={() => go('discover')}><Sparkles size={20}/>For you</button>
-        <button aria-current={tab === 'people' ? 'page' : undefined} onClick={() => go('people')}><Users size={20}/>The room<span className="nav-count">{people.filter(p => p.id !== me.id).length}</span></button>
+        <button aria-current={tab === 'people' ? 'page' : undefined} onClick={() => go('people')}><Users size={20}/>The room<span className="nav-count">{people.filter(p => p.id !== me?.id).length}</span></button>
         <button aria-current={tab === 'inbox' ? 'page' : undefined} onClick={() => go('inbox')}><MessageCircle size={20}/>Inbox{unread > 0 && <span className="unread-badge">{unread}</span>}</button>
         <button aria-current={tab === 'profile' ? 'page' : undefined} onClick={() => go('profile')}><UserRound size={20}/>My profile</button>
         <div className="nav-note"><HeartHandshake size={26}/><p>You don’t need to know everything to help someone.</p><span>{demo ? 'Fictional rehearsal room' : app.connected ? 'Updates automatically' : 'Reconnecting…'}</span></div>
       </nav>
       <main className="workspace-main">
+        {!me ? <>
+          <section hidden={tab !== 'profile'}>
+            <div className="page-intro"><h1>A little bit <em>about you.</em></h1></div>
+            <div className="join-card onboarding-card"><ProfileForm busy={app.busy} demo={demo} onSave={save}/></div>
+          </section>
+          {tab !== 'profile' && <section className="join-preview">
+            <div className="page-intro"><h1>{tab === 'discover' ? 'For you.' : tab === 'people' ? 'Meet the room.' : 'Say hello.'}</h1></div>
+            <div className="empty-state"><UserRound size={30}/><h2>Start with a little about you.</h2><p>Add your answers to join the room, find useful connections and send messages.</p><button className="button primary" onClick={() => go('profile')}>Add your details <ArrowRight size={17}/></button></div>
+          </section>}
+        </> : <>
+
         {saved && <div className="success-note" role="status"><Check size={16}/>Your profile is saved. You can change it any time.</div>}
         {tab === 'discover' && <>
-          <div className="page-intro"><span className="eyebrow">GOOD CONVERSATIONS START HERE</span><h1>A little help.<br className="mobile-only"/> <em>Both ways.</em></h1><p>Hey {me.name}. Here are a few people worth saying hello to.</p></div>
-          <div className="connection-note"><span className="note-icon"><HeartHandshake size={23}/></span><p>You might help one person and learn from another.<br/>{' '}<strong>These are independent introductions, not assigned pairs.</strong></p></div>
+          <div className="page-intro discover-intro"><h1>Hey {me.name}, <em>here are a few people worth saying hello to.</em></h1></div>
           {!hasAnalysis && <div className="analysis-note" role="status">{app.analysing ? <><LoaderCircle className="spin" size={18}/>Reading your answers to find useful connections…</> : <><Sparkles size={18}/><div>{demo ? 'Rehearsal matching uses human-labelled fixtures, not live AI. Use Maya’s sample answers to explore matching, or browse the room.' : app.analysisError || 'Your answers are saved. Prepare recommendations when you’re ready.'}{!demo && <button className="text-button" onClick={() => void app.analyse()}>Try preparing recommendations</button>}</div></>}</div>}
           {!demo && hasAnalysis && app.reviewPending > 0 && <div className="analysis-note" role="status"><LoaderCircle className="spin" size={18}/><p>{app.reviewError || `Checking ${app.reviewPending} possible connections against what people actually offered. Introductions will appear as checks finish. You can browse the room and message people meanwhile.`}</p></div>}
           {app.recommendationError && <div className="analysis-note" role="status">{app.recommendationError}</div>}
           {(['receive', 'give'] as const).map(direction => {
             const list = direction === 'receive' ? receive : give;
-            return <section className="match-section" key={direction}><div className="section-heading"><div><span className="section-kicker">{direction === 'receive' ? 'A FRESH PAIR OF EYES' : 'SOMETHING YOU CAN SHARE'}</span><h2>{direction === 'receive' ? 'People who could help you' : 'People you could help'}</h2></div><span className={`direction-icon ${direction}`}><ArrowUpRight size={22}/></span></div>
+            return <section className="match-section" key={direction}><div className="section-heading"><div><h2>{direction === 'receive' ? 'People who could help you' : 'People you could help'}</h2></div><span className={`direction-icon ${direction}`}><ArrowUpRight size={22}/></span></div>
               {list.length ? <><div className="cards-grid">{list.slice(0, expanded[direction] ? undefined : 3).map(match => <MatchCard key={match.person.id} match={match} onOpen={() => openProfile(match.person, match)}/>)}</div>{list.length > 3 && <button className="text-button explore" onClick={() => setExpanded(old => ({ ...old, [direction]: !old[direction] }))}>{expanded[direction] ? 'Show fewer' : `Explore ${list.length - 3} more`}<ArrowRight size={16}/></button>}</> : <div className="empty-state compact"><Users size={25}/><h3>{app.analysing || (!demo && app.reviewPending > 0) ? 'Checking your introductions…' : app.recommendationError ? 'Recommendations are temporarily unavailable.' : hasAnalysis ? 'No relevant recommendations yet.' : 'No recommendations to show yet.'}</h3><p>{hasAnalysis ? 'We’ll update this as people join or change their answers. You can still explore the room.' : 'We won’t guess or substitute keyword matches.'}</p><button className="text-button" onClick={() => go('people')}>Explore the room <ArrowRight size={16}/></button></div>}
             </section>;
           })}
-          <p className="matching-footnote"><Sparkles size={14}/>Introductions are based on what people actually wrote—not job titles or compatibility scores.</p>
         </>}
-        {tab === 'people' && <><div className="page-intro"><span className="eyebrow">DIFFERENT BACKGROUNDS. SHARED CURIOSITY.</span><h1>Meet <em>the room.</em></h1><p>Browse everyone. A recommendation isn’t required to say hello.</p></div><label className="search-label" htmlFor="search">Find a name or topic</label><input className="search-input" id="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search names, questions or offers…" aria-describedby="room-result-count"/>
-          <div className="section-heading"><p id="room-result-count" className="small muted" role="status">Showing {roomPeople.length} of {roomTotal} people · Recently updated first</p>{search && <button className="text-button" onClick={() => setSearch('')}>Clear search</button>}</div>
+        {tab === 'people' && <><div className="page-intro"><h1>Meet <em>the room.</em></h1></div><label className="search-label" htmlFor="search">Find a name or topic</label><input className="search-input" id="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search names, questions or offers…"/>
+          {search && <div className="room-search-actions"><button className="text-button" onClick={() => setSearch('')}>Clear search</button></div>}
           <div className="cards-grid room-grid">{roomPeople.map(person => <article className="person-card" key={person.id}><div className="person-heading"><Avatar person={person}/><div><h3>{person.name}</h3><p>{person.recognition || 'Here to connect'}</p></div></div><span className="section-kicker">I’D LIKE HELP WITH</span><p className="clamp-three">{person.need}</p><span className="section-kicker">I CAN HELP WITH</span><p className="clamp-three">{person.offer}</p><button className="card-action" onClick={() => openProfile(person)}>View profile <ArrowUpRight size={16}/></button></article>)}</div>
           {roomPeople.length === 0 && <div className="empty-state"><Users/><h3>{search ? 'No profiles found.' : 'You’re early. Welcome!'}</h3><p>{search ? 'Try a different name or topic.' : 'Other participants will appear here as they join.'}</p></div>}
         </>}
-        {tab === 'profile' && <><div className="page-intro"><span className="eyebrow">A LITTLE ABOUT YOU</span><h1>Your corner <em>of the room.</em></h1><p>Changed your mind or got unstuck? Keep your answers up to date.</p></div><section className="profile-detail own-profile"><div className="profile-title"><Avatar person={me} large/><div><h2>{me.name}</h2><p>{me.recognition || 'Add a recognition description to help people find you.'}</p></div></div>{editing ? <ProfileForm initial={me} busy={app.busy} demo={demo} onSave={save} onCancel={() => setEditing(false)}/> : <><span className="section-kicker">I’D LIKE HELP WITH</span><p className="answer-text">{me.need}</p><span className="section-kicker">I CAN HELP WITH</span><p className="answer-text">{me.offer}</p><button className="button primary" onClick={() => setEditing(true)}>Edit my profile <ArrowUpRight size={17}/></button><p className="small muted">Visible to participants in this event. Messages remain private. Access is tied to this browser’s saved session.</p></>}</section></>}
-        {tab === 'inbox' && <><div className="page-intro inbox-intro"><span className="eyebrow">TAKE IT FROM HERE</span><h1>Say <em>hello.</em></h1><p>Private conversations. Real connections.</p></div>
+        {tab === 'profile' && <><div className="page-intro"><h1>A little bit <em>about you.</em></h1></div><section className="profile-detail own-profile"><div className="profile-title"><Avatar person={me} large/><div><h2>{me.name}</h2><p>{me.recognition || 'Add a recognition description to help people find you.'}</p></div></div>{editing ? <ProfileForm initial={me} busy={app.busy} demo={demo} onSave={save} onCancel={() => setEditing(false)}/> : <><span className="section-kicker">I’D LIKE HELP WITH</span><p className="answer-text">{me.need}</p><span className="section-kicker">I CAN HELP WITH</span><p className="answer-text">{me.offer}</p><button className="button primary" onClick={() => setEditing(true)}>Edit my profile <ArrowUpRight size={17}/></button><p className="small muted">Visible to participants in this event. Messages remain private. Access is tied to this browser’s saved session.</p></>}</section></>}
+        {tab === 'inbox' && <><div className="page-intro inbox-intro"><h1>Say <em>hello.</em></h1></div>
           <div className={`inbox-layout ${active ? 'chat-open' : ''}`}><section className="conversation-list" aria-label="Conversations">{app.conversations.length ? [...app.conversations].sort((a, b) => (app.inbox.find(i => i.conversation_id === b.id)?.last_message_at || '').localeCompare(app.inbox.find(i => i.conversation_id === a.id)?.last_message_at || '')).map(c => {
             const person = people.find(p => p.id === (c.participant_a === me.id ? c.participant_b : c.participant_a));
             const item = app.inbox.find(i => i.conversation_id === c.id);
@@ -152,6 +157,7 @@ export default function Meetup({ slug, demo = false }: { slug: string; demo?: bo
             {sendError && <div className="send-error" role="alert"><p>{sendError}</p>{failed?.conversation === active && <button className="text-button" disabled={sending} onClick={() => void send(true)}>Retry failed message</button>}</div>}
             <form className="message-composer" onSubmit={e => { e.preventDefault(); void send(); }}><label className="sr-only" htmlFor="message">Message to {partner.name}</label><textarea id="message" rows={2} maxLength={2000} value={draft} disabled={sending} onChange={e => { setDraft(e.target.value); setSent(false); }} placeholder={`Say hello to ${partner.name}…`}/><button className="send-button" aria-label="Send message" disabled={!draft.trim() || sending || !!failed} type="submit">{sending ? <LoaderCircle className="spin" size={19}/> : <Send size={19}/>}</button></form><div className="composer-status" role="status">{sending ? 'Sending…' : failed ? <><span>Failed message saved for retry.</span><button className="text-button" onClick={() => { setFailed(null); setSendError(''); }}>Discard failed attempt</button></> : sent ? 'Sent' : 'Text only · 2,000 characters maximum'}</div>
           </> : <div className="empty-state chat-placeholder"><MessageCircle size={36}/><h3>A little message.<br/>A useful conversation.</h3><p>Choose a conversation or say hello to someone new.</p></div>}</section></div>
+        </>}
         </>}
       </main></div>
       <nav className="bottom-nav" aria-label="Mobile navigation">{([{ id: 'discover', label: 'For you', icon: Sparkles }, { id: 'people', label: 'The room', icon: Users }, { id: 'inbox', label: 'Inbox', icon: MessageCircle }, { id: 'profile', label: 'You', icon: UserRound }] as const).map(item => <button key={item.id} aria-current={tab === item.id ? 'page' : undefined} onClick={() => go(item.id)}><item.icon size={21}/><span>{item.label}</span>{item.id === 'inbox' && unread > 0 && <span className="bottom-unread">{unread}</span>}</button>)}</nav>

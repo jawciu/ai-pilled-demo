@@ -35,7 +35,7 @@ export function reviewedRecommendations(me: Person, people: Person[], reviews: M
       catch { pending++; failed++; continue; }
       if (decision.level !== 'direct') continue;
       const match = {
-        person: { ...person, interpretation: null }, topic: decision.topic, score: 3,
+        person: { ...person, interpretation: null }, topic: decision.topic, score: decision.coverage === 'full' ? 2 : 1,
         explanation: direction === 'receive'
           ? `You asked for “${decision.need_evidence}”. ${person.name} offered “${decision.offer_evidence}”.`
           : `${person.name} asked for “${decision.need_evidence}”. You offered “${decision.offer_evidence}”.`,

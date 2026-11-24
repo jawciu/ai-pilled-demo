@@ -31,7 +31,10 @@ test('pending and failed connection checks never look like no useful people exis
     return route.fulfill({status:502,contentType:'application/json',body:JSON.stringify({error:'We couldn’t check some connections. We’ll retry shortly; no guessed introductions have been added.'})});
   });
   await page.goto('/e/mock-event');
-  await expect(page.getByRole('heading',{name:'A little help. Both ways.'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'A little bit about you.'})).toBeVisible();
+  const navigation=page.getByRole('navigation',{name:page.viewportSize()!.width<=760?'Mobile navigation':'Main navigation',exact:true});
+  await navigation.getByRole('button',{name:'For you',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Hey Test viewer, here are a few people worth saying hello to.'})).toBeVisible();
   await expect(page.getByText('Checking your introductions…',{exact:true})).toHaveCount(2);
   await expect(page.getByText('No relevant recommendations yet.',{exact:true})).toHaveCount(0);
   await expect(page.locator('.analysis-note').filter({hasText:'no guessed introductions'})).toBeVisible();
@@ -43,7 +46,6 @@ test('pending and failed connection checks never look like no useful people exis
   await page.getByRole('button',{name:'Meet Test helper',exact:true}).click();
   await expect(page.getByRole('dialog').getByText('Hi Test helper! Could you help fix my phone layout?',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Close profile'}).click();
-  const navigation=page.getByRole('navigation',{name:page.viewportSize()!.width<=760?'Mobile navigation':'Main navigation',exact:true});
   await navigation.getByRole('button',{name:/^Inbox/}).click();
   await expect(page.getByText('Your next hello starts here.')).toBeVisible();
 });

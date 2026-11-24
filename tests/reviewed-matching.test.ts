@@ -9,9 +9,9 @@ const [rawA,rawB,rawC] = demoPeople();
 const a = { ...rawA, interpretation: { ...rawA.interpretation!, pipeline: 2 } };
 const b = { ...rawB, interpretation: { ...rawB.interpretation!, pipeline: 2 } };
 const c = { ...rawC, interpretation: { ...rawC.interpretation!, pipeline: 2 } };
-const accepted = { level: 'direct' as const, need_evidence: 'help debugging React', offer_evidence: 'debug React apps', topic: 'React debugging', opening: 'Could you help me find why Save crashes my app?' };
+const accepted = { level: 'direct' as const, coverage: 'full' as const, need_evidence: 'help debugging React', offer_evidence: 'debug React apps', topic: 'React debugging', opening: 'Could you help me find why Save crashes my app?' };
 function review(overrides: Partial<MatchReview> = {}): MatchReview {
-  return { event_id: a.event_id,requester_id:a.id,helper_id:b.id,requester_version:1,helper_version:1,revision:2,status:'ready',lease_id:'lease',lease_until:'2026-01-01T00:00:00Z',decision:accepted,...overrides };
+  return { event_id: a.event_id,requester_id:a.id,helper_id:b.id,requester_version:1,helper_version:1,revision:3,status:'ready',lease_id:'lease',lease_until:'2026-01-01T00:00:00Z',decision:accepted,...overrides };
 }
 test('known task boundaries cannot be bypassed by a speculative model decision', () => {
   const scoped=(need:string,offer:string)=>{
@@ -30,7 +30,7 @@ test('known task boundaries cannot be bypassed by a speculative model decision',
 test('an erroneous CSS label cannot suppress an actual readability question', () => {
   const requester={...a,need:'I need help making the small pale-grey text on my mobile form easier to read.',interpretation:{...a.interpretation,needs:[{...a.interpretation.needs[0],topic:'css-debugging'}]}};
   const helper={...b,offer:'I can spot low colour contrast and suggest more readable text sizes on a phone.',interpretation:{...b.interpretation,offers:[{...b.interpretation.offers[0],topic:'visual-design'}]}};
-  const old = review({decision:{level:'none',need_evidence:'',offer_evidence:'',topic:'',opening:''}});
+  const old = review({decision:{level:'none',coverage:'none',need_evidence:'',offer_evidence:'',topic:'',opening:''}});
   assert.equal(staleReadabilityRejection(old,requester,helper),true);
   assert.equal(reviewedRecommendations(requester,[helper],[old]).pending>0,true);
   const rechecked=review({decision:{...old.decision!,scope_policy:2}});
@@ -58,7 +58,7 @@ test('live recommendations require checked evidence, not an exact topic label', 
   assert.ok(confirmed.receive[0].explanation.includes('help debugging React'));
 });
 test('cached rejection prevents a weak match even when old topics would agree', () => {
-  const rejected = review({decision:{level:'none',need_evidence:'',offer_evidence:'',topic:'',opening:''}});
+  const rejected = review({decision:{level:'none',coverage:'none',need_evidence:'',offer_evidence:'',topic:'',opening:''}});
   assert.equal(reviewedRecommendations(a,[b],[rejected]).receive.length,0);
 });
 test('same checked directed pair appears in receive and the helper give list', () => {
@@ -90,7 +90,7 @@ test('unsupported excerpts, incomplete batches and duplicate indexes fail closed
   assert.throws(()=>validateReviewBatch({decisions:[{...accepted,index:0},{...accepted,index:0}]},[...input,...input]));
   assert.throws(()=>validateReviewBatch({decisions:[{...accepted,index:5}]},input));
   const rejection = validateReviewBatch({decisions:[{...accepted,index:0,level:'none'}]},input)[0];
-  assert.deepEqual(rejection,{index:0,level:'none',need_evidence:'',offer_evidence:'',topic:'',opening:''});
+  assert.deepEqual(rejection,{index:0,level:'none',coverage:'none',need_evidence:'',offer_evidence:'',topic:'',opening:''});
   assert.equal(reviewedRecommendations(a,[b],[review({decision:{...accepted,offer_evidence:'fictional invented skill'}})]).receive.length,0);
 });
 test('rejected pairs with explanatory metadata do not break valid matches in the same batch', () => {

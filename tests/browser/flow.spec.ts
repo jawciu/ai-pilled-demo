@@ -5,7 +5,7 @@ async function join(page: Page) {
   await page.getByRole('button', { name: 'Use Maya’s fictional rehearsal profile' }).click();
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: 'Find my people' }).click();
-  await expect(page.getByRole('heading', { name: 'A little help. Both ways.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Hey Maya, here are a few people worth saying hello to.' })).toBeVisible();
 }
 async function nav(page: Page, name: string | RegExp) {
   const mobile = page.viewportSize()!.width <= 760;
@@ -36,7 +36,7 @@ test('join, independent directions, message, simulated reply, refresh, profile e
   await page.getByRole('button', { name: 'Edit my profile' }).click();
   await page.getByLabel('First name').fill('Maya Updated');
   await page.getByRole('button', { name: 'Save my changes' }).click();
-  await expect(page.getByText('Hey Maya Updated.', { exact: false })).toBeVisible();
+  await expect(page.getByText('Hey Maya Updated,', { exact: false })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
   expect(errors).toEqual([]);
   await page.screenshot({ path: `.tmp/${test.info().project.name}-recommendations.png`, fullPage: true });
@@ -56,7 +56,7 @@ test('separate rehearsal sessions do not share identities or pretend to be live'
   const first = await browser.newContext(); const second = await browser.newContext();
   const a = await first.newPage(); const b = await second.newPage();
   await join(a); await b.goto('/demo');
-  await expect(b.getByRole('heading', { name: 'Let’s start with you.' })).toBeVisible();
+  await expect(b.getByRole('heading', { name: 'A little bit about you.' })).toBeVisible();
   await expect(a.getByText('Fictional people. Messages stay in this browser.', { exact: false })).toBeVisible();
   await first.close(); await second.close();
 });
@@ -71,7 +71,7 @@ test('suggested opening question survives repeated conversation navigation', asy
   await nav(page, 'Inbox');
   await expect(page.locator('.conversation-row')).toHaveCount(1);
 });
-test('the room exposes the full count and clears a stale search on return', async ({ page }) => {
+test('the simplified room retains all profiles and clears a stale search on return', async ({ page }) => {
   await join(page);
   await nav(page, /^The room/);
   const search = page.getByRole('textbox', { name: 'Find a name or topic' });
@@ -79,7 +79,7 @@ test('the room exposes the full count and clears a stale search on return', asyn
   expect(total).toBeGreaterThan(3);
   await search.fill(' Theo ');
   await expect(page.locator('.room-grid .person-card')).toHaveCount(1);
-  await expect(page.getByRole('status')).toContainText(`Showing 1 of ${total} people`);
+  await expect(page.getByText(/Recently updated first/)).toHaveCount(0);
   await page.getByRole('button', { name: 'Clear search', exact: true }).click();
   await expect(search).toHaveValue('');
   await expect(page.locator('.room-grid .person-card')).toHaveCount(total);
@@ -88,7 +88,7 @@ test('the room exposes the full count and clears a stale search on return', asyn
   await nav(page, /^The room/);
   await expect(search).toHaveValue('');
   await expect(page.locator('.room-grid .person-card')).toHaveCount(total);
-  await expect(page.getByRole('status')).toContainText(`Showing ${total} of ${total} people`);
+
 });
 test('landing and onboarding fit a phone without horizontal scrolling', async ({ page }) => {
   await page.goto('/');
@@ -96,6 +96,27 @@ test('landing and onboarding fit a phone without horizontal scrolling', async ({
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
   await page.screenshot({ path: `.tmp/${test.info().project.name}-landing.png`, fullPage: true });
   await page.getByRole('link', { name: 'Explore the rehearsal' }).click();
-  await expect(page.getByRole('heading', { name: 'Let’s start with you.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'A little bit about you.' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+});
+
+test('navigation is available before joining and You preserves the onboarding draft', async ({page})=>{
+  await page.goto('/demo');
+  const you=page.viewportSize()!.width<=760?'You':'My profile';
+  const navigation=page.getByRole('navigation',{name:page.viewportSize()!.width<=760?'Mobile navigation':'Main navigation',exact:true});
+  await expect(navigation).toBeVisible();
+  await expect(navigation.getByRole('button',{name:you,exact:true})).toHaveAttribute('aria-current','page');
+  await expect(page.getByRole('heading',{name:'A little bit about you.',exact:true})).toBeVisible();
+  await page.getByLabel('First name').fill('Draft name');
+  await page.screenshot({path:`.tmp/${test.info().project.name}-onboarding.png`,fullPage:true});
+  for(const name of ['For you',/^The room/,'Inbox']) {
+    await nav(page,name);
+    await expect(page.getByRole('button',{name:'Add your details'})).toBeVisible();
+    await expect(page.locator('.person-card')).toHaveCount(0);
+  }
+  await nav(page,you);
+  await expect(page.getByLabel('First name')).toHaveValue('Draft name');
+  await expect(page.locator('.brand')).toHaveText('aipilled');
+  await expect(page.locator('.event-badge .live-dot')).toHaveCount(0);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
 });
