@@ -1,6 +1,6 @@
 import type { Match, MatchReview, Person } from './types';
 import { PIPELINE_REVISION, REVIEW_REVISION, validateReviewBatch } from './ai-matching';
-import { compatibleTaskScope } from './task-scope';
+import { compatibleTaskScope, staleReadabilityRejection } from './task-scope';
 
 export function hasCurrentAnalysis(person: Person) {
   return person.interpretation?.version === person.answer_version && person.interpretation.pipeline === PIPELINE_REVISION;
@@ -27,7 +27,7 @@ export function reviewedRecommendations(me: Person, people: Person[], reviews: M
       if (!requester.interpretation!.needs.length || !helper.interpretation!.offers.length) continue;
       if (!compatibleTaskScope(requester,helper)) continue;
       const review = byKey.get(reviewKey(requester,helper));
-      if (!review || !reviewIsCurrent(review,requester,helper) || review.status !== 'ready') {
+      if (!review || !reviewIsCurrent(review,requester,helper) || review.status !== 'ready' || staleReadabilityRejection(review,requester,helper)) {
         pending++; if (review?.status === 'failed') failed++; continue;
       }
       let decision;

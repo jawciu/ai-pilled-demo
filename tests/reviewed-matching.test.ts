@@ -4,7 +4,7 @@ import { validateReviewBatch, reviewAnswers, reviewFailureCode } from '../src/li
 import { reviewedRecommendations } from '../src/lib/reviewed-matching';
 import { demoPeople } from '../src/lib/demo';
 import type { MatchReview } from '../src/lib/types';
-import { compatibleTaskScope } from '../src/lib/task-scope';
+import { compatibleTaskScope, staleReadabilityRejection } from '../src/lib/task-scope';
 const [rawA,rawB,rawC] = demoPeople();
 const a = { ...rawA, interpretation: { ...rawA.interpretation!, pipeline: 2 } };
 const b = { ...rawB, interpretation: { ...rawB.interpretation!, pipeline: 2 } };
@@ -30,6 +30,12 @@ test('known task boundaries cannot be bypassed by a speculative model decision',
 test('an erroneous CSS label cannot suppress an actual readability question', () => {
   const requester={...a,need:'I need help making the small pale-grey text on my mobile form easier to read.',interpretation:{...a.interpretation,needs:[{...a.interpretation.needs[0],topic:'css-debugging'}]}};
   const helper={...b,offer:'I can spot low colour contrast and suggest more readable text sizes on a phone.',interpretation:{...b.interpretation,offers:[{...b.interpretation.offers[0],topic:'visual-design'}]}};
+  const old = review({decision:{level:'none',need_evidence:'',offer_evidence:'',topic:'',opening:''}});
+  assert.equal(staleReadabilityRejection(old,requester,helper),true);
+  assert.equal(reviewedRecommendations(requester,[helper],[old]).pending>0,true);
+  const rechecked=review({decision:{...old.decision!,scope_policy:2}});
+  assert.equal(staleReadabilityRejection(rechecked,requester,helper),false);
+  assert.equal(reviewedRecommendations(requester,[helper],[rechecked]).receive.length,0,'fresh AI rejection remains rejected');
   assert.equal(compatibleTaskScope(requester,helper),true);
   assert.equal(compatibleTaskScope({...requester,need:'I need to debug broken CSS and fix pale-grey text sizes in code.'},helper),false);
   assert.equal(reviewedRecommendations(requester,[helper],[]).receive.length,0,'scope permission alone never creates an introduction');

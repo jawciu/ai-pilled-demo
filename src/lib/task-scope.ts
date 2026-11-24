@@ -1,4 +1,4 @@
-import type { Person } from './types';
+import type { MatchReview, Person } from './types';
 
 function taskFamily(topic: string): string | null {
   const value=topic.toLowerCase();
@@ -13,12 +13,19 @@ function taskFamily(topic: string): string | null {
   if (/automat|spreadsheet|csv-processing/.test(value)) return 'automation';
   return null;
 }
+export function readabilityScopeException(requester: Person, helper: Person) {
+  const offered=(helper.interpretation?.offers||[]).map(t=>taskFamily(t.topic));
+  const readabilityQuestion=/\b(readab\w*|easier to read|hard to read|colour contrast|color contrast|pale.grey|text sizes?|font sizes?)\b/i.test(requester.need);
+  const implementationQuestion=/\b(debug\w*|css|javascript|code|flexbox|media.quer\w*|implement\w*|fix\w*|broken|breaks?)\b/i.test(requester.need);
+  return readabilityQuestion && !implementationQuestion && offered.includes('visual-design');
+}
+export function staleReadabilityRejection(review: MatchReview, requester: Person, helper: Person) {
+  return review.status === 'ready' && review.decision?.level === 'none' && review.decision.scope_policy !== 2 && readabilityScopeException(requester,helper);
+}
 export function compatibleTaskScope(requester: Person, helper: Person) {
   const needs=requester.interpretation?.needs||[],offers=helper.interpretation?.offers||[];
   const requested=needs.map(t=>taskFamily(t.topic)),offered=offers.map(t=>taskFamily(t.topic));
-  const readabilityQuestion=/\b(readab\w*|easier to read|hard to read|colour contrast|color contrast|pale.grey|text sizes?|font sizes?)\b/i.test(requester.need);
-  const implementationQuestion=/\b(debug\w*|css|javascript|code|flexbox|media.quer\w*|implement\w*|fix\w*|broken|breaks?)\b/i.test(requester.need);
-  if (readabilityQuestion && !implementationQuestion && offered.includes('visual-design')) return true;
+  if (readabilityScopeException(requester,helper)) return true;
   if (!requested.length || !offered.length || requested.includes(null) || offered.includes(null)) return true;
   return requested.some(family=>offered.includes(family));
 }

@@ -12,6 +12,6 @@ export type MatchReview = {
   event_id: string; requester_id: string; helper_id: string;
   requester_version: number; helper_version: number; revision: number;
   status: 'processing' | 'ready' | 'failed'; lease_id: string; lease_until: string;
-  decision: { level: 'direct' | 'related' | 'none'; need_evidence: string; offer_evidence: string; topic: string; opening: string } | null;
+  decision: { level: 'direct' | 'related' | 'none'; need_evidence: string; offer_evidence: string; topic: string; opening: string; scope_policy?: number } | null;
 };
 export type Match = { person: Person; explanation: string; question: string; topic: string; score: number };

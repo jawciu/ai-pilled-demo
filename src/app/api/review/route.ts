@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { reviewAnswers, reviewFailureCode } from '@/lib/ai-matching';
 import { reviewIsCurrent } from '@/lib/reviewed-matching';
 import type { MatchReview, Person } from '@/lib/types';
-import { compatibleTaskScope } from '@/lib/task-scope';
+import { compatibleTaskScope, staleReadabilityRejection } from '@/lib/task-scope';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 export async function POST(request: Request) {
@@ -16,11 +16,24 @@ export async function POST(request: Request) {
   const { data: { user }, error: authError } = await db.auth.getUser(authorization.slice(7));
   if (authError || !user) return NextResponse.json({ error: 'Sign in first.' }, { status: 401 });
   if (!secret || !process.env.OPENAI_API_KEY) return NextResponse.json({ error: 'Connection checks are not configured. Your profile and inbox still work.' }, { status: 503 });
+  const admin = createClient(url,secret,{ auth: { persistSession: false } });
+  const [existing, profiles] = await Promise.all([db.rpc('current_match_reviews'),db.from('participants').select('*').limit(200)]);
+  if (existing.error || profiles.error) return NextResponse.json({ error: 'Connection checks are temporarily unavailable.' }, { status: 503 });
+  const byId = new Map((profiles.data as Person[]).map(p => [p.id,p]));
+  for (const old of existing.data as MatchReview[]) {
+    const requester=byId.get(old.requester_id),helper=byId.get(old.helper_id);
+    if (requester && helper && reviewIsCurrent(old,requester,helper) && staleReadabilityRejection(old,requester,helper)) {
+      const result=await admin.from('match_reviews').update({status:'failed',lease_until:new Date(0).toISOString(),decision:null})
+        .eq('requester_id',old.requester_id).eq('helper_id',old.helper_id)
+        .eq('requester_version',old.requester_version).eq('helper_version',old.helper_version)
+        .eq('revision',old.revision).eq('lease_id',old.lease_id).eq('status','ready');
+      if (result.error) return NextResponse.json({error:'Could not refresh an outdated connection check.'},{status:503});
+    }
+  }
   const { data: claimed, error: claimError } = await db.rpc('claim_match_reviews',{ p_limit: 8 });
   if (claimError) return NextResponse.json({ error: 'Connection checks need the matching database update. Your inbox still works.' }, { status: 503 });
   const jobs = claimed as MatchReview[];
   if (!jobs.length) return NextResponse.json({ reviewed: 0 });
-  const admin = createClient(url,secret,{ auth: { persistSession: false } });
   try {
     const ids = [...new Set(jobs.flatMap(j => [j.requester_id,j.helper_id]))];
     const { data, error } = await db.from('participants').select('*').in('id',ids);
@@ -36,7 +49,7 @@ export async function POST(request: Request) {
     for (let i = 0; i < valid.length; i++) {
       const job = valid[i];
       const { index: _index, ...decision } = byLease.get(job.lease_id) || { index: 0, level: 'none', need_evidence: '', offer_evidence: '', topic: '', opening: '' };
-      const { error: saveError } = await admin.from('match_reviews').update({ status: 'ready', decision, updated_at: new Date().toISOString() })
+      const { error: saveError } = await admin.from('match_reviews').update({ status: 'ready', decision: { ...decision, scope_policy: 2 }, updated_at: new Date().toISOString() })
         .eq('requester_id',job.requester_id).eq('helper_id',job.helper_id)
         .eq('requester_version',job.requester_version).eq('helper_version',job.helper_version)
         .eq('revision',job.revision).eq('lease_id',job.lease_id).eq('status','processing');
