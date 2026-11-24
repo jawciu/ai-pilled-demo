@@ -1,0 +1,27 @@
+{
+  "deployment": "https://ai-pilled-demo.vercel.app",
+  "verified_app_commit": "4d2246d",
+  "event": "ai-pilled-test-2026",
+  "fictional_profiles": 24,
+  "results": {
+    "original": { "total": 24, "passed": 24, "missed": 0, "false_positives": 0, "unverified": 0 },
+    "initial_held_out_now_regressions": { "total": 10, "passed": 10, "missed": 0, "false_positives": 0, "unverified": 0 },
+    "discovered_regressions": { "total": 2, "passed": 2, "missed": 0, "false_positives": 0, "unverified": 0 },
+    "additional_verification": { "total": 7, "passed": 7, "missed": 0, "false_positives": 0, "unverified": 0 }
+  },
+  "total_passed": 43,
+  "total_checks": 43,
+  "explicit_french_offers_retained": true,
+  "accepted_opening_question_limits_passed": true,
+  "new_review_batches_in_final_run": 3,
+  "logic_database_tests_passed": 36,
+  "browser_tests_passed": 14,
+  "production_build_passed": true,
+  "notes": [
+    "The final run reuses extraction and previously checked decisions; it is not a fresh model draw for every cached pair.",
+    "The final readability helper is ranked fifth and appears through Explore more; all other expected positives are in the top three.",
+    "Earlier failed and intermediate runs are documented in MATCHING_REPAIR.md.",
+    "No raw anonymous-session credentials, participant IDs or messages are included in this summary.",
+    "Physical-device, shared-Wi-Fi and 60–80-person load verification are not claimed."
+  ]
+}
