@@ -27,6 +27,13 @@ test('known task boundaries cannot be bypassed by a speculative model decision',
   assert.equal(scoped('interface-design','visual-design'),true);
   assert.equal(scoped('unfamiliar-useful-task','unfamiliar-offer'),true);
 });
+test('an erroneous CSS label cannot suppress an actual readability question', () => {
+  const requester={...a,need:'I need help making the small pale-grey text on my mobile form easier to read.',interpretation:{...a.interpretation,needs:[{...a.interpretation.needs[0],topic:'css-debugging'}]}};
+  const helper={...b,offer:'I can spot low colour contrast and suggest more readable text sizes on a phone.',interpretation:{...b.interpretation,offers:[{...b.interpretation.offers[0],topic:'visual-design'}]}};
+  assert.equal(compatibleTaskScope(requester,helper),true);
+  assert.equal(compatibleTaskScope({...requester,need:'I need to debug broken CSS and fix pale-grey text sizes in code.'},helper),false);
+  assert.equal(reviewedRecommendations(requester,[helper],[]).receive.length,0,'scope permission alone never creates an introduction');
+});
 test('speculative related decisions are not shown as useful introductions', () => {
   assert.equal(reviewedRecommendations(a,[b],[review({decision:{...accepted,level:'related'}})]).receive.length,0);
 });

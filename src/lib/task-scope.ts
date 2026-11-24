@@ -16,6 +16,9 @@ function taskFamily(topic: string): string | null {
 export function compatibleTaskScope(requester: Person, helper: Person) {
   const needs=requester.interpretation?.needs||[],offers=helper.interpretation?.offers||[];
   const requested=needs.map(t=>taskFamily(t.topic)),offered=offers.map(t=>taskFamily(t.topic));
+  const readabilityQuestion=/\b(readab\w*|easier to read|hard to read|colour contrast|color contrast|pale.grey|text sizes?|font sizes?)\b/i.test(requester.need);
+  const implementationQuestion=/\b(debug\w*|css|javascript|code|flexbox|media.quer\w*|implement\w*|fix\w*|broken|breaks?)\b/i.test(requester.need);
+  if (readabilityQuestion && !implementationQuestion && offered.includes('visual-design')) return true;
   if (!requested.length || !offered.length || requested.includes(null) || offered.includes(null)) return true;
   return requested.some(family=>offered.includes(family));
 }
