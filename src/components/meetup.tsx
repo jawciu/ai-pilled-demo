@@ -104,7 +104,6 @@ export default function Meetup({ slug, demo = false, presenter = false }: { slug
         </>;
 
   return <div className="app-shell">
-    {demo && <div className="demo-banner"><span><Sparkles size={14}/><strong>REHEARSAL</strong> · Fictional people. Messages stay in this browser.</span><Link href="/">About this app <ArrowUpRight size={13}/></Link></div>}
     <header className="app-header"><Link className="brand" href="/"><span className="brand-mark">ai</span><span className="brand-name">pilled</span></Link>{me && <button className="header-profile" onClick={() => go('profile')} aria-label="My profile"><Avatar person={me}/></button>}</header>
     {app.error && <div role="alert" className="error-box global-alert">{app.error}<button className="text-button" onClick={() => { app.setError(''); void app.refresh(); }}>Try again</button></div>}
     {app.loading ? <main className="loading-state" aria-live="polite"><LoaderCircle className="spin"/><h2>Finding your place in the room…</h2></main> : <>
@@ -113,7 +112,7 @@ export default function Meetup({ slug, demo = false, presenter = false }: { slug
         <button aria-current={tab === 'people' ? 'page' : undefined} onClick={() => go('people')}><Users size={20}/>The room<span className="nav-count">{people.filter(p => p.id !== me?.id).length}</span></button>
         <button aria-current={tab === 'inbox' ? 'page' : undefined} onClick={() => go('inbox')}><MessageCircle size={20}/>Inbox{unread > 0 && <span className="unread-badge">{unread}</span>}</button>
         <button aria-current={tab === 'profile' ? 'page' : undefined} onClick={() => go('profile')}><UserRound size={20}/>My profile</button>
-        <div className="nav-note"><span>{demo ? 'Fictional rehearsal room' : app.connected ? 'Updates automatically' : 'Reconnecting…'}</span></div>
+        {!demo && <div className="nav-note"><span>{app.connected ? 'Updates automatically' : 'Reconnecting…'}</span></div>}
       </nav>
       <main className="workspace-main"><div className={`workspace-content ${(!me && tab !== 'people') || tab === 'profile' ? 'workspace-content-narrow' : ''}`}>
         {!me ? <>
