@@ -20,9 +20,16 @@ async function main(){
  const [alice,bob,outsider]=clients;
  const chat=await alice.rpc('start_conversation',{p_other:ids[1]});if(chat.error)throw chat.error;
  assert.equal((await bob.rpc('start_conversation',{p_other:ids[0]})).data,chat.data);
+ let observedMessage='';
+ const channel=bob.channel(`launch-verification-${crypto.randomUUID()}`).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:`conversation_id=eq.${chat.data}`},payload=>{observedMessage=String(payload.new.client_id);});
+ await new Promise<void>((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Realtime subscription timed out')),15000);channel.subscribe(status=>{if(status==='SUBSCRIBED'){clearTimeout(timer);resolve();}else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){clearTimeout(timer);reject(Error(`Realtime subscription ${status}`));}});});
  const clientId=crypto.randomUUID();
  const payload={p_conversation:chat.data,p_body:'Fictional launch-check message',p_client_id:clientId};
  const first=await alice.rpc('send_message',payload);if(first.error)throw first.error;
+ const realtimeDeadline=Date.now()+15000;
+ while(observedMessage!==clientId && Date.now()<realtimeDeadline)await new Promise(r=>setTimeout(r,100));
+ await bob.removeChannel(channel);
+ assert.equal(observedMessage,clientId,'Live realtime message notification');
  const retry=await alice.rpc('send_message',payload);assert.equal(retry.data.id,first.data.id);
  const inbox=await bob.rpc('get_inbox');if(inbox.error)throw inbox.error;
  assert.ok(Number(inbox.data.find((i:any)=>i.conversation_id===chat.data).unread)>0);
@@ -43,7 +50,7 @@ async function main(){
  await fresh.auth.setSession(JSON.parse(await readFile(`${dir}/Alice.json`,'utf8')));
  const persisted=await fresh.from('messages').select('id').eq('conversation_id',chat.data);if(persisted.error)throw persisted.error;
  assert.ok(persisted.data.some(r=>r.id===response.data.id));
- const result={event,passed:true,checks:['anonymous join','one conversation per pair','send/reply','retry idempotency','unread and mark-read','persistence via new client','outsider read/send/receipt/inbox denial','empty message rejection'],time:new Date().toISOString()};
+ const result={event,passed:true,checks:['anonymous join','one conversation per pair','send/reply','live realtime message delivery','retry idempotency','unread and mark-read','persistence via new client','outsider read/send/receipt/inbox denial','empty message rejection'],time:new Date().toISOString()};
  await writeFile(`${dir}/result.json`,JSON.stringify(result,null,2));console.log(JSON.stringify(result));
 }
 main().catch(e=>{console.error(e instanceof Error?e.message:'Live messaging verification failed');process.exitCode=1;});

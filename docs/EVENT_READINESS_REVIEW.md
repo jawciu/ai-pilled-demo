@@ -18,11 +18,11 @@ Migration 003 was applied to Supabase project `tzndmqndeskxinqnyouv` through its
 
 The local 80-person embedded-Postgres simulation completed all 6,320 directed pairs in 99 batch-completion waves. Every participant received a first worker turn by wave 9. In a sparse fixture with one useful helper per person, all useful pairs reached review by wave 4. The test verifies eight-worker capacity, duplicate tabs, lease recovery, fair admission, cache reuse, scoped access and zero participant updates from scheduling. Provider completions are simulated: these figures are not live AI latency or a production load benchmark.
 
-Live messaging checks passed in a separate fictional event, `ai-pilled-test-codex-2026-11-24`: anonymous join, conversation uniqueness, send/reply, retry idempotency, unread/read receipts, persistence through a new client, outsider read/send/receipt/inbox denial and empty-message rejection. No fixture was added to the attendee event.
+Live messaging checks passed in a separate fictional event, `ai-pilled-test-codex-2026-11-24`: anonymous join, conversation uniqueness, send/reply, live realtime delivery, retry idempotency, unread/read receipts, persistence through a new client, outsider read/send/receipt/inbox denial and empty-message rejection. No fixture was added to the attendee event.
 
 The Supabase dashboard showed anonymous sign-in capacity of 150 per hour per IP. This setting was inspected, not changed. Physical venue Wi-Fi and actual attendee phones remain untested.
 
-All45 logic/database tests (42 existing/current plus3 focused retry tests),18 desktop/mobile browser checks, TypeScript and production build passed. Fresh real-model scenario evaluation will follow deployment; results will be recorded below when complete.
+All 45 logic/database tests (42 existing/current plus 3 focused retry tests), 18 desktop/mobile browser checks, TypeScript and production build passed. Fresh real-model results are recorded below.
 
 ## Presentation and mobile
 
@@ -36,4 +36,14 @@ Task-family guards remain conservative heuristics and the AI reviewer can still 
 
 ## Release outcome
 
-Deployment and fresh-model evaluation pending at the time this initial release note was written.
+Implementation commit `df984a3` was pushed to main and Vercel reported a successful production deployment. The published mobile layout was visually checked at 390×844: You is selected and navigation is present before profile entry.
+
+Fresh live evaluation processed 24 fictional profiles and passed all 43 checks: 24 original, 10 held-out, 2 discovered regressions and 7 fresh-verification cases. No missed expected match, false positive, unverified case, directional inconsistency or provider error occurred in this set. French offers and opening-question limits passed. The suite completed in 171,152ms with 64 newly processed review batches at concurrency 4. This is an independent fresh run, not reused BoltzAgent results.
+
+The harness prepares all profiles before reviewing, unlike normal browsers. It first observed useful introductions 52–162 seconds after suite start (38–161 seconds after the corresponding fixture joined). Those are harness observations, not an attendee latency promise. A later cached recommendation request completed in1, 273ms, with no pending checks.
+
+An additional read-only check compared all 48 directional recommendation lists to their stored coverage decisions: all were ordered correctly, with 37 full and 13 partial accepted directed pairs across the room. The 43 labelled scenarios cover selected acceptance/rejection cases; this does not manually validate every unlabelled pair.
+
+Live messaging/realtime checks and full/partial ordering checks passed against this production Supabase project using only the isolated test event. No live 80-person provider load or venue/device test was claimed.
+
+Attendee link: https://ai-pilled-demo.vercel.app/e/ai-pilled-room-84e2c9b7 . The existing attendee PNG QR was decoded and confirmed to contain this exact URL. The final script deliberately leaves time for joining and browsing; The room is available while introductions are processed.
