@@ -1,6 +1,6 @@
 ## Active work
 
-- **Task:** Blank presenter demo with the rehearsal banner and sidebar rehearsal label removed.
+- **Task:** Added a standalone attendee QR display page for the left side of the presentation split screen.
 - **Authorisation:** Caroline explicitly approved commit/push, Supabase migration and parallel agents on 24 November. No external messaging authorised.
 - **Checkout:** `codex/matching-event-readiness`, base `a5439af`; remote main confirmed unchanged immediately before release preparation.
 - **Changes:** Existing revision-3 matching unchanged. Added jitter, offline retry pause/resume, read/AI timeouts and background-error recovery. Restored pilled font; removed header label, sidebar slogan and requested form disclosure/checkbox/footer; opened guest Room browsing/search/profile viewing via event-scoped public API; messaging still requires joining; centred desktop content within right-hand pane.
@@ -11,3 +11,5 @@
 - **Local verification:** 80-person simulation all 6320 directed pairs, worker cap 8, all first turns by wave 9, sparse useful pairs by wave 4; provider completions simulated. Browser tests require full Chromium via `../review-playwright.config.ts` (native headless-shell failed locally).
 - **Deliverables:** Revised five-minute script (296 spoken words) in parent `outputs/ai-pilled-five-minute-script.txt`; attendee and original test-room QR PNGs are copied to outputs with distinct names. Use a separate browser/private session to join the test event; browsing needs no profile.
 - **Limits:** Actual venue Wi-Fi/attendee phones and full 80-person live-provider latency not tested. Review `EVENT_READINESS_REVIEW.md` for detailed evidence.
+
+- **QR display:** `/qr` uses the existing verified attendee QR, with a scoped dark-green layout matching the brand. Decoded target is the real attendee room. Visually checked 480×900 and confirmed no overflow at 320×568; production build passed. No new service, dependency or migration.

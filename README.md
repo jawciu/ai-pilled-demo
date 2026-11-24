@@ -6,6 +6,7 @@ A mobile-first meetup companion: share what you need, share what you can offer, 
 
 - Next.js app with mobile and desktop layouts.
 - `/demo`: fictional rehearsal profiles and browser-local messages. Fixtures are explicitly human-labelled, NOT live AI output. A simulated reply button is explicitly labelled. Custom rehearsal answers produce no matches unless they are an exact fixture; there is no keyword fallback.
+- `/qr`: responsive attendee QR display for the left pane of a presentation split screen. Links to the real attendee event.
 - `/demo?presenter=1`: blank presenter setup on every opening/reload, with no sample-fill button. Presenter state stays in memory; existing rehearsal storage is preserved.
 - `/e/<event-slug>`: Supabase-backed live flow, requiring the database setup below. Anyone with the event link can browse public profile cards before joining. Personal recommendations and messages require a joined participant session.
 - Cached server-side OpenAI structured extraction and answer-to-answer relevance checks; independent directional matching. No percentages, assigned pairs, selfies or blocking.
