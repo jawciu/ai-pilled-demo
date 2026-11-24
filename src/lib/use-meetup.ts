@@ -22,7 +22,7 @@ function errorText(error: unknown) {
   }
   return 'Something went wrong. Please try again.';
 }
-export function useMeetup(slug: string, demo: boolean) {
+export function useMeetup(slug: string, demo: boolean, presenter = false) {
   const [me, setMe] = useState<Person | null>(null);
   const [people, setPeople] = useState<Person[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -51,7 +51,7 @@ export function useMeetup(slug: string, demo: boolean) {
 
   const syncDemo = useCallback((state: DemoState) => {
     demoRef.current = state;
-    localStorage.setItem(DEMO_KEY, JSON.stringify(state));
+    if (!presenter) localStorage.setItem(DEMO_KEY, JSON.stringify(state));
     setMe(state.me);
     setPeople([...demoPeople().filter(p => p.name !== 'Maya'), ...(state.me ? [state.me] : [])]);
     setConversations(state.conversations);
@@ -61,7 +61,7 @@ export function useMeetup(slug: string, demo: boolean) {
       return { conversation_id: c.id, preview: msgs.at(-1)?.body ?? null, last_message_at: msgs.at(-1)?.created_at ?? c.created_at,
         unread: msgs.filter(m => m.sender_id !== state.me?.id && m.created_at > (state.read[c.id] || '')).length };
     }));
-  }, []);
+  }, [presenter]);
 
   const runReview = useCallback(async (token: string) => {
     if (reviewInFlight.current || Date.now() < reviewRetryAt.current) return;
@@ -148,7 +148,7 @@ export function useMeetup(slug: string, demo: boolean) {
     mounted.current = true;
     setPeople([]); setMe(null); setConversations([]); setInbox([]); setMessages([]); setMatches({ receive: [], give: [] });
     setReviewPending(0); setRefreshError(''); setLoading(true);
-    if (demo) { syncDemo(loadDemo()); setLoading(false); return; }
+    if (demo) { syncDemo(presenter ? blank : loadDemo()); setLoading(false); return; }
     void refresh();
     // Spread event-wide polling over time while staying inside the worker demand TTL.
     let timer: ReturnType<typeof setTimeout>;
@@ -165,7 +165,7 @@ export function useMeetup(slug: string, demo: boolean) {
     window.addEventListener('online', focus);
     document.addEventListener('visibilitychange', visible);
     return () => { mounted.current = false; refreshing.current = null; clearTimeout(timer); window.removeEventListener('focus', focus); window.removeEventListener('online', focus); document.removeEventListener('visibilitychange', visible); };
-  }, [demo, refresh, syncDemo]);
+  }, [demo, presenter, refresh, syncDemo]);
 
   useEffect(() => {
     if (demo || !me) return;

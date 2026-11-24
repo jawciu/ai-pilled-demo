@@ -38,8 +38,8 @@ function MatchCard({ match, onOpen }: { match: Match; onOpen: () => void }) {
     <span className="topic-label">{match.topic.replaceAll('-', ' ')}</span><p className="match-reason">{match.explanation}</p>
     <button className="card-action" onClick={onOpen}>Meet {match.person.name}<ChevronRight size={17}/></button></article>;
 }
-export default function Meetup({ slug, demo = false }: { slug: string; demo?: boolean }) {
-  const app = useMeetup(slug, demo);
+export default function Meetup({ slug, demo = false, presenter = false }: { slug: string; demo?: boolean; presenter?: boolean }) {
+  const app = useMeetup(slug, demo, presenter);
   const [tab, setTab] = useState<'discover' | 'people' | 'inbox' | 'profile'>('profile');
   const [editing, setEditing] = useState(false);
   const [selected, setSelected] = useState<Person | null>(null);
@@ -119,7 +119,7 @@ export default function Meetup({ slug, demo = false }: { slug: string; demo?: bo
         {!me ? <>
           <section hidden={tab !== 'profile'}>
             <div className="page-intro"><h1>A little bit <em>about you.</em></h1></div>
-            <div className="join-card onboarding-card"><ProfileForm busy={app.busy} demo={demo} onSave={save}/></div>
+            <div className="join-card onboarding-card"><ProfileForm busy={app.busy} demo={demo && !presenter} onSave={save}/></div>
           </section>
           {tab === 'people' && roomContent}
           {(tab === 'discover' || tab === 'inbox') && <section className="join-preview">

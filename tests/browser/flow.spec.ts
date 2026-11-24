@@ -242,3 +242,24 @@ test('guest background refresh keeps existing room cards in place', async ({page
   expect(await card.boundingBox()).toEqual(before);
   release();
 });
+
+test('presenter link starts blank without replacing the saved rehearsal profile', async ({page}) => {
+  await join(page);
+  const saved = await page.evaluate(() => localStorage.getItem('ai-pilled-rehearsal-v1'));
+  await page.goto('/demo?presenter=1');
+  for (const label of ['First name', 'I’d like help with', 'I can help with', 'How can people spot you?']) {
+    await expect(page.getByLabel(label)).toHaveValue('');
+  }
+  await expect(page.getByRole('button', {name:'Use Maya’s fictional rehearsal profile'})).toHaveCount(0);
+  await page.getByLabel('First name').fill('Presenter');
+  await page.getByLabel('I’d like help with').fill('I need help publishing my website.');
+  await page.getByLabel('I can help with').fill('I can help with visual design.');
+  await page.getByRole('button', {name:'Find my people'}).click();
+  await expect(page.getByRole('heading', {name:'Hey Presenter, here are a few people worth saying hello to.'})).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('ai-pilled-rehearsal-v1'))).toBe(saved);
+  await page.reload();
+  await expect(page.getByLabel('First name')).toHaveValue('');
+  await page.screenshot({path:`.tmp/${test.info().project.name}-presenter-blank.png`,fullPage:true});
+  await page.goto('/demo');
+  await expect(page.getByRole('heading',{name:'Maya',exact:true})).toBeVisible();
+});
