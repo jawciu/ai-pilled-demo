@@ -19,7 +19,7 @@ test('a helper is not excluded because they appear in the other direction', () =
   assert.ok(recommendations(maya, people, 'receive').some(m => m.person.name === 'Theo'));
   assert.ok(recommendations(maya, people, 'give').some(m => m.person.name === 'Theo'));
 });
-test('job descriptions and learning deployment do not imply expertise', () => {
+test('learning deployment and knowing another tool do not imply expertise', () => {
   const jules = people.find(p => p.name === 'Jules')!;
   assert.deepEqual(recommendations(jules, people, 'receive').map(m => m.person.name), ['Theo']);
   assert.ok(!recommendations(maya, people, 'receive').some(m => m.person.name === 'Sam'));
