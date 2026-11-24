@@ -31,7 +31,7 @@ test('join, independent directions, message, simulated reply, refresh, profile e
   await nav(page, 'Inbox');
   await page.getByRole('button', { name: /Theo.*simulated rehearsal reply/ }).click();
   await expect(page.getByRole('log').getByText('Hi Theo, can you help me with the save button?')).toBeVisible();
-  await nav(page, page.viewportSize()!.width < 760 ? 'You' : 'My profile');
+  await nav(page, 'My profile');
   await page.getByRole('button', { name: 'Edit my profile' }).click();
   await page.getByLabel('First name').fill('Maya Updated');
   await page.getByRole('button', { name: 'Save my changes' }).click();
@@ -98,9 +98,9 @@ test('landing and onboarding fit a phone without horizontal scrolling', async ({
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
 });
 
-test('navigation is available before joining and You preserves the onboarding draft', async ({page})=>{
+test('navigation is available before joining and My profile preserves the onboarding draft', async ({page})=>{
   await page.goto('/demo');
-  const you=page.viewportSize()!.width<=760?'You':'My profile';
+  const you='My profile';
   const navigation=page.getByRole('navigation',{name:page.viewportSize()!.width<=760?'Mobile navigation':'Main navigation',exact:true});
   await expect(navigation).toBeVisible();
   await expect(navigation.getByRole('button',{name:you,exact:true})).toHaveAttribute('aria-current','page');
@@ -112,7 +112,7 @@ test('navigation is available before joining and You preserves the onboarding dr
     if (name === 'Inbox') await expect(page.getByRole('button',{name:'Add your details'})).toBeVisible();
     else if (name === 'For you') {
       await expect(page.getByRole('button',{name:'Add your details'})).toHaveCount(0);
-      await expect(page.getByText('Add your answers in You. Your recommendations will appear here once we’ve checked the connections.')).toBeVisible();
+      await expect(page.getByText('Add your answers in My profile. Your recommendations will appear here once we’ve checked the connections.')).toBeVisible();
       await expect(page.locator('.person-card')).toHaveCount(0);
     } else {
       await expect(page.getByRole('textbox',{name:'Find a name or topic'})).toBeVisible();
@@ -135,7 +135,7 @@ test('navigation is available before joining and You preserves the onboarding dr
 test('section containers are centred beside desktop navigation and retain mobile width', async ({page})=>{
   await page.goto('/demo');
   const mobile=page.viewportSize()!.width<=760;
-  const you=mobile?'You':'My profile';
+  const you='My profile';
   async function checkLayout(name:string) {
     const pane=await page.locator('.workspace-main').boundingBox();
     const content=await page.locator('.workspace-content').boundingBox();
@@ -205,7 +205,7 @@ test('guest event rooms show their public profiles without reading private conve
 });
 
 
-test('guest room loading leaves You and navigation usable', async ({page})=>{
+test('guest room loading leaves My profile and navigation usable', async ({page})=>{
   let release!:()=>void;
   const responseReady=new Promise<void>(resolve=>{release=resolve;});
   await page.route('**/api/room?*',async route=>{
@@ -219,7 +219,7 @@ test('guest room loading leaves You and navigation usable', async ({page})=>{
   await expect(page.getByText('People’s profiles will appear here as they join.')).toHaveCount(0);
   release();
   await expect(page.getByText('People’s profiles will appear here as they join.')).toBeVisible();
-  await nav(page,page.viewportSize()!.width<=760?'You':'My profile');
+  await nav(page,'My profile');
   await expect(page.getByLabel('First name')).toHaveValue('Still typing');
 });
 

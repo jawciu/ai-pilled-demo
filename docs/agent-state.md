@@ -1,6 +1,6 @@
 ## Active work
 
-- **Task:** Updated presenter/rehearsal profiles to reflect beginners building digital projects with AI.
+- **Task:** Made profile navigation consistent across mobile, desktop, attendee and presenter views.
 - **Authorisation:** Caroline explicitly approved commit/push, Supabase migration and parallel agents on 24 November. No external messaging authorised.
 - **Checkout:** `codex/matching-event-readiness`, base `a5439af`; remote main confirmed unchanged immediately before release preparation.
 - **Changes:** Existing revision-3 matching unchanged. Added jitter, offline retry pause/resume, read/AI timeouts and background-error recovery. Restored pilled font; removed header label, sidebar slogan and requested form disclosure/checkbox/footer; opened guest Room browsing/search/profile viewing via event-scoped public API; messaging still requires joining; centred desktop content within right-hand pane.
@@ -17,3 +17,5 @@
 - **Branding:** Original `pill-ink.svg` and `pill-paper.svg` from `https://ai-pilled.co/assets/logo/` are stored in `public/brand/`, shared across landing, meetup and QR pages. Wordmark uses the site’s JetBrains Mono 800 styling. Four desktop/mobile presenter/navigation checks and production build pass.
 
 - **Demo examples:** Removed sewing, fashion-contract and prompt-injection examples from the displayed demo profiles. Alex now asks about API keys, Sam about clearer AI coding prompts, and Casey about Supabase persistence. Matching topic evidence updated alongside answers; 17 matching checks and production build pass. Real attendee profiles and private evaluation fixtures are unchanged.
+
+- **Navigation label:** Use “My profile” everywhere, including the mobile navigation and recommendation empty-state guidance. Four desktop/mobile navigation checks and production build pass.
