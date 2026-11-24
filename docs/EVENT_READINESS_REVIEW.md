@@ -40,7 +40,7 @@ Implementation commit `df984a3` was pushed to main and Vercel reported a success
 
 Fresh live evaluation processed 24 fictional profiles and passed all 43 checks: 24 original, 10 held-out, 2 discovered regressions and 7 fresh-verification cases. No missed expected match, false positive, unverified case, directional inconsistency or provider error occurred in this set. French offers and opening-question limits passed. The suite completed in 171,152ms with 64 newly processed review batches at concurrency 4. This is an independent fresh run, not reused BoltzAgent results.
 
-The harness prepares all profiles before reviewing, unlike normal browsers. It first observed useful introductions 52–162 seconds after suite start (38–161 seconds after the corresponding fixture joined). Those are harness observations, not an attendee latency promise. A later cached recommendation request completed in1, 273ms, with no pending checks.
+The harness prepares all profiles before reviewing, unlike normal browsers. It first observed useful introductions 52–162 seconds after suite start (38–161 seconds after the corresponding fixture joined). Those are harness observations, not an attendee latency promise. A later cached recommendation request completed in 1,273ms, with no pending checks.
 
 An additional read-only check compared all 48 directional recommendation lists to their stored coverage decisions: all were ordered correctly, with 37 full and 13 partial accepted directed pairs across the room. The 43 labelled scenarios cover selected acceptance/rejection cases; this does not manually validate every unlabelled pair.
 
