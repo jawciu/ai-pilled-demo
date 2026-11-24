@@ -1,8 +1,9 @@
 import Link from 'next/link';
+import Brand from '@/components/brand';
 import { ArrowUpRight, ArrowRight, Sparkles, MessageCircle, HeartHandshake } from 'lucide-react';
 export default function Home() {
   return <main className="landing">
-    <header className="landing-header"><Link className="brand" href="/"><span className="brand-mark">ai</span><span className="brand-name">pilled</span></Link><span className="eyebrow">BETTER TOGETHER, IN PERSON</span></header>
+    <header className="landing-header"><Link className="brand" href="/"><Brand/></Link><span className="eyebrow">BETTER TOGETHER, IN PERSON</span></header>
     <section className="landing-grid">
       <div className="landing-copy"><span className="pill"><span className="live-dot" /> THE MEETUP COMPANION</span>
         <h1>Your next breakthrough<br />might be <em>in this room.</em></h1>

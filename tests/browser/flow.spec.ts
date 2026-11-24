@@ -121,13 +121,13 @@ test('navigation is available before joining and You preserves the onboarding dr
   }
   await nav(page,you);
   await expect(page.getByLabel('First name')).toHaveValue('Draft name');
-  await expect(page.locator('.brand')).toHaveText('aipilled');
+  await expect(page.locator('.brand')).toHaveText('AI Pilled');
   await expect(page.locator('.event-badge')).toHaveCount(0);
   await expect(page.getByRole('checkbox')).toHaveCount(0);
   await expect(page.locator('.privacy-note')).toHaveCount(0);
   await expect(page.getByText(/No account to create/)).toHaveCount(0);
-  await expect(page.locator('.brand-name')).toHaveCSS('font-family', /DM Sans/);
-  await expect(page.locator('.brand-name')).toHaveCSS('font-weight', '650');
+  await expect(page.locator('.brand-wordmark')).toHaveCSS('font-family', /JetBrains Mono/);
+  await expect(page.locator('.brand-wordmark')).toHaveCSS('font-weight', '800');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
 });
 

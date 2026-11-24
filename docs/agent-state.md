@@ -1,6 +1,6 @@
 ## Active work
 
-- **Task:** Added a standalone attendee QR display page for the left side of the presentation split screen.
+- **Task:** Added the attendee QR display page and replaced placeholder branding with the official AI Pilled pixel-pill assets.
 - **Authorisation:** Caroline explicitly approved commit/push, Supabase migration and parallel agents on 24 November. No external messaging authorised.
 - **Checkout:** `codex/matching-event-readiness`, base `a5439af`; remote main confirmed unchanged immediately before release preparation.
 - **Changes:** Existing revision-3 matching unchanged. Added jitter, offline retry pause/resume, read/AI timeouts and background-error recovery. Restored pilled font; removed header label, sidebar slogan and requested form disclosure/checkbox/footer; opened guest Room browsing/search/profile viewing via event-scoped public API; messaging still requires joining; centred desktop content within right-hand pane.
@@ -13,3 +13,5 @@
 - **Limits:** Actual venue Wi-Fi/attendee phones and full 80-person live-provider latency not tested. Review `EVENT_READINESS_REVIEW.md` for detailed evidence.
 
 - **QR display:** `/qr` uses the existing verified attendee QR, with a scoped dark-green layout matching the brand. Decoded target is the real attendee room. Visually checked 480×900 and confirmed no overflow at 320×568; production build passed. No new service, dependency or migration.
+
+- **Branding:** Original `pill-ink.svg` and `pill-paper.svg` from `https://ai-pilled.co/assets/logo/` are stored in `public/brand/`, shared across landing, meetup and QR pages. Wordmark uses the site’s JetBrains Mono 800 styling. Four desktop/mobile presenter/navigation checks and production build pass.

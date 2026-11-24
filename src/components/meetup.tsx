@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import Brand from './brand';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ArrowLeft, ArrowRight, ArrowUpRight, Check, ChevronRight, Coffee, LoaderCircle, MessageCircle, Send, Sparkles, UserRound, Users, X } from 'lucide-react';
 import { useMeetup } from '@/lib/use-meetup';
@@ -104,7 +105,7 @@ export default function Meetup({ slug, demo = false, presenter = false }: { slug
         </>;
 
   return <div className="app-shell">
-    <header className="app-header"><Link className="brand" href="/"><span className="brand-mark">ai</span><span className="brand-name">pilled</span></Link>{me && <button className="header-profile" onClick={() => go('profile')} aria-label="My profile"><Avatar person={me}/></button>}</header>
+    <header className="app-header"><Link className="brand" href="/"><Brand/></Link>{me && <button className="header-profile" onClick={() => go('profile')} aria-label="My profile"><Avatar person={me}/></button>}</header>
     {app.error && <div role="alert" className="error-box global-alert">{app.error}<button className="text-button" onClick={() => { app.setError(''); void app.refresh(); }}>Try again</button></div>}
     {app.loading ? <main className="loading-state" aria-live="polite"><LoaderCircle className="spin"/><h2>Finding your place in the room…</h2></main> : <>
       <div className="workspace-layout"><nav className="side-nav" aria-label="Main navigation"><div className="nav-event">YOUR MEETUP<span>AI pilled</span></div>
